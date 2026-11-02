@@ -40,7 +40,8 @@ msiexec exit-code handling including **13 `InstallerBusy`** for `1618`
 after retries; ProductCode tracking; reconciliation in `list` and
 `doctor`; EXE detection rules; `--allow-installer` and
 `--scope machine`; a WiX-built fixture MSI and a minimal fixture EXE
-installer built in CI.
+installer built in CI. Completes `self uninstall` for v1.1: it now
+refuses when installer-managed packages are still installed (A14).
 
 **Acceptance**
 - Real install and uninstall of the fixture MSI (per-user and

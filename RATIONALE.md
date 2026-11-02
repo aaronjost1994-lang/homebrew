@@ -223,9 +223,11 @@ Part A now states what to build; why lives here.
 
 ## R15 — Phase 0 defaults instead of settled facts (Phase 0)
 
-**Decision:** the five v2.1-review inputs and the five owner-question
-answers are recorded as **default decisions**; Phase 0 adopts each and
-must report evidence that contradicts any of them.
+**Decision:** the review inputs and the owner-question answers are
+recorded as **default decisions** — eight in the Phase 0 list, plus
+the System.CommandLine 2.0 stable probe added in v2.3.1 (nine);
+Phase 0 adopts each and must report evidence that contradicts any
+of them.
 
 **Why:** v2.2 turned the reviewer's open questions into settled facts
 the planning phase could not push back on (review minor 18). Defaults
@@ -242,3 +244,15 @@ command-line overflow.
 **Why:** one stable, documented mapping (`ExitCodes.cs`) keeps scripts
 and JSON error envelopes honest; the 130 note prevents "bug reports"
 from Windows-savvy users while keeping POSIX-familiar ergonomics.
+
+## R17 — Phase order: E precedes F (D1, Phase F; v2.3.1)
+
+**Decision:** the phase order stays 0, A–D, E, F. The first public
+release, prepared in Phase F, verifies the v1.0 criteria and lists
+the v1.1 additions separately; a portable-only v1.0 build can be cut
+by tagging the tree after Phase D.
+
+**Why:** Phase E's fixture installers, helper signing and CI jobs
+need the CI and release surface that Phase F builds; running F once,
+after E, avoids building the release workflow twice. D1's v1.0/v1.1
+split describes feature scope, not build order.

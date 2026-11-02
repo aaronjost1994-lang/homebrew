@@ -45,7 +45,9 @@ matching per the Phase A probe; `search_text` built with
 `repo add` with fingerprint approval; `repo list` and
 `repo remove`; `update` (all three take the mutation lock);
 `self update` against a signed fixture feed (D6 root chain, initial
-compiled-in root, N→N+1 rotation); a fixture repository generator
+compiled-in root, N→N+1 rotation); `self uninstall` (A14 — its
+installer-managed refusal check is completed in Phase E); `info`
+against the catalog (A9's `writesToInstallDir` warning); a fixture repository generator
 (`scripts/new-fixture-repo.ps1` plus the `WinBrew.TestFixtures`
 signer); bundle export, install and `--locked`; `--offline` (expired
 metadata only if verified while valid, with age shown).

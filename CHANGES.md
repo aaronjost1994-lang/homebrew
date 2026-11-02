@@ -1,6 +1,6 @@
 # WinBrew Implementation Prompt — Changelog and Review Traceability
 
-**Document version:** 2.3 (2026-11-03)
+**Document version:** 2.3.1 (2026-11-03)
 **Companion files:** `PROMPT.md` (Part A + Part C), `phases/phase-0.md`
 … `phases/phase-f.md` (Part B), `RATIONALE.md` (decision rationale).
 
@@ -17,6 +17,40 @@
 | 2.1 | 2026-11-02 | v2.0 review (chat) | 30 fixes claimed; several disputed (see the correction below) |
 | 2.2 | 2026-11-03 | "Review: … v2.1" (30 findings) | Full rewrite; all 30 findings addressed (Appendix A) |
 | 2.3 | 2026-11-03 | "Review: … v2.2" (18 findings) | All 18 findings verified against the v2.2 text and fixed; prompt split into session files (Appendix B) |
+| 2.3.1 | 2026-11-03 | Consistency review of the file set | 9 planning-consistency fixes (below); phase files moved to `phases/`; README added |
+
+## Changes in v2.3.1 (from v2.3)
+
+A consistency review of the finished file set (not a new external
+review). No design changes; every fix removes an ambiguity or an
+unassigned item.
+
+1. **Phase order vs D1 clarified.** Phases run 0, A–D, E, F; D1 now
+   states that the Phase F release covers the v1.0 criteria (A19
+   1–12) and lists the v1.1 additions, and that a portable-only v1.0
+   build can be cut by tagging after Phase D. Rationale added
+   (RATIONALE.md R17). (D1, Phase F)
+2. **`self uninstall` assigned to Phase D** (completing the `self`
+   lifecycle alongside `self update`); its installer-managed refusal
+   is completed in Phase E. (A14; Phases D, E)
+3. **Catalog `info` assigned to Phase D**, including A9's
+   `writesToInstallDir` warning. (A9; Phase D)
+4. **Phase files moved to `phases/`**, matching the routing table in
+   `PROMPT.md` and the CHANGES/RATIONALE references; README added.
+5. **R15's default count corrected** — eight defaults plus the
+   System.CommandLine probe added in fix 9 (the old text said "five
+   and five"). (RATIONALE.md)
+6. **`scripts/publish-files.txt` added to the A5 tree.** (A4, A18)
+7. **Bundle lockfile syntax defined:** `bundle install
+   --lock <path>` with `--locked` as a mode flag; default lock path
+   `<bundle>.lock.json`. (A8, A15)
+8. **Elevated-helper request transport specified:** request path as
+   the helper's sole argument, request file under
+   `%LOCALAPPDATA%\WinBrew\staging\elevated\`, treated as untrusted.
+   (A12)
+9. **Phase 0 additions:** default decision 9 — probe for the exact
+   stable System.CommandLine 2.0.x version; deliverable —
+   per-project target frameworks. (Phase 0, A4)
 
 ## Changes in v2.3 (from v2.2)
 

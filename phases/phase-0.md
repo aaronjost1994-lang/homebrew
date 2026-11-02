@@ -66,7 +66,16 @@ Each phase session must:
      `LocalMachine\Root` on disposable runners (A16). If the project
      owner's security policy forbids installing a test root CA, report
      it in the plan — E2E then needs another trusted-HTTPS approach.
+  9. System.CommandLine: probe nuget.org for the exact **stable
+     2.0.x** package version and record it in the plan (the A4 anchor
+     depends on the GA surface). If no stable 2.0 release exists,
+     report the closest available version with a recommendation
+     before Phase A starts.
 - Final repository tree and project reference graph.
+- Target frameworks per project — `net10.0` versus a Windows-specific
+  TFM for `WinBrew.Cli`, `WinBrew.Windows`, `WinBrew.Shim` and
+  `WinBrew.ElevatedHelper` (registry, ACL and `IsWow64Process2`
+  needs; the shim is Native AOT) — recorded with rationale.
 - SQLite schema v1 (tables, indexes, constraints, including the
   repository catalog tables for D6 — package summaries, version entries
   with dependencies and architectures, and per-role accepted-version

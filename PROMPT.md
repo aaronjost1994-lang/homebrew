@@ -1,8 +1,14 @@
 # WinBrew — .NET Native Windows Package Manager
 # Implementation Prompt v2.3 — PROMPT.md
 
-**Prompt version:** 2.3 (2026-11-03)
-**Supersedes:** v2.2 (single-file edition). v2.3 applies every finding
+**Prompt version:** 2.3.1 (2026-11-03)
+**Supersedes:** v2.3. v2.3.1 is a planning-consistency patch: the
+phase order vs D1 clarified, `self uninstall` and catalog `info`
+assigned to phases, the `phases/` layout adopted, the bundle
+`--locked` syntax defined, the elevated-helper request transport
+specified, and two Phase 0 additions (a System.CommandLine 2.0
+stable probe; per-project target frameworks). No design changes.
+v2.3 applies every finding
 from "Review: WinBrew .NET Implementation Prompt v2.2" (4 critical,
 7 important, 7 minor) and splits the prompt into session-sized files.
 **Where the rest went:** the changelogs, the v2.1 correction and the
@@ -20,7 +26,8 @@ implementation sessions); the reasoning behind each decision is in
 | `RATIONALE.md` | Why each decision was made | Phase 0 and Phase F only |
 
 Start each session with `PROMPT.md`, exactly **one** phase file and the
-checkpoint report from the previous phase. Run the phases in order. Do
+checkpoint report from the previous phase. Run the phases in order:
+0, A, B, C, D, E, F (D1 explains why E precedes F). Do
 not ask for more than one phase in a single session.
 
 # PART A — SHARED PREAMBLE
@@ -239,6 +246,7 @@ scripts/
   build.ps1
   test.ps1
   publish.ps1
+  publish-files.txt        # exact publish output per RID (A4, R13)
   new-fixture-repo.ps1
   wbrew-completion.ps1
 .github/workflows/
@@ -299,9 +307,16 @@ needs an ADR in `docs/adr/`.
 
 ### D1. Scope
 - **v1.0 release candidate:** per-user scope, ZIP portable packages only
-  (Phases A–D and F).
+  (Phases A–D; release hardening in Phase F).
 - **v1.1:** MSI (per-user and per-machine) and explicitly approved EXE
   installers (Phase E).
+- **Phase order vs release:** the phases run 0, A–D, E, F, so Phase E
+  (v1.1) precedes Phase F. The release prepared in Phase F is the
+  first public release: its readiness report (C2) verifies the v1.0
+  criteria (A19 items 1–12) **and** lists the v1.1 additions with
+  their own evidence. A portable-only v1.0 build can still be cut by
+  tagging the tree after Phase D; Phase F itself runs once, after E,
+  and hardens both (RATIONALE.md, R17).
 - WinBrew never changes installation scope silently. A per-machine
   operation needs `--scope machine`, explicit consent and UAC elevation
   through the helper.
@@ -684,7 +699,7 @@ wbrew repo add <name> <url> [--trust-root <fingerprint>...]
 wbrew repo list [--json]
 wbrew repo remove <name>
 wbrew bundle export --file <path> [--lock <path>]
-wbrew bundle install --file <path> [--locked <lockfile>]
+wbrew bundle install --file <path> [--lock <path>] [--locked]
 wbrew config get <key>
 wbrew config set <key> <value>
 wbrew config list [--json]
@@ -955,6 +970,15 @@ an unmanaged file.
 - It accepts only a typed request file (`msi-install`, `msi-uninstall`,
   `exe-install`, `exe-uninstall`) with strict schema validation. It
   never accepts a command line, script or arbitrary executable path.
+- **Request transport:** the caller passes the request file's path as
+  the helper's **sole argument** through `ShellExecute` (`runas`).
+  The non-elevated WinBrew writes the request file under
+  `%LOCALAPPDATA%\WinBrew\staging\elevated\`; it names the operation
+  type, the artifact's source path and the expected SHA-256. The
+  helper treats the request file as untrusted input (strict schema
+  validation) and always copies the artifact into its protected
+  `<op>` directory, verifying the held-handle hash against the
+  request, before anything runs.
 - **TOCTOU and directory pre-creation protection — the helper never
   adopts a directory it did not create.** Standard users can create
   folders under `%ProgramData%` by default, so the helper treats
@@ -1096,7 +1120,9 @@ an unmanaged file.
   exact version, architecture, repository identity (name, URL, root key
   fingerprints), manifest SHA-256, artifact URL and artifact SHA-256,
   and explicit or dependency status.
-- `bundle install --locked` never re-resolves. It fetches the exact
+- `bundle install --locked` never re-resolves. The lockfile path comes
+  from `--lock <path>`, defaulting to `<bundle>.lock.json` beside the
+  bundle file. It fetches the exact
   manifests, checks their digests against the lockfile and fails
   clearly (exit 3 or 5) if any entry is missing or different.
 - In `--offline` mode, locked installs succeed only from verified cache

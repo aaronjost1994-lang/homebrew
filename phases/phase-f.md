@@ -37,6 +37,8 @@ eligibility-checked signing route (A18); non-functional measurements
 (A17, including the first-run
 metric, the search median-of-10 measurement, and the extraction
 verification evidence); the release-readiness report (Part C2).
+Because Phase E precedes Phase F (D1), the readiness report covers
+the v1.0 criteria (A19 items 1–12) **and** the v1.1 additions.
 
 **Acceptance**
 - The CI matrix is green, or the readiness report lists each blocker.
