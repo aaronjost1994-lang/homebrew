@@ -1,0 +1,579 @@
+<title>WinBrew Spec Mindmap</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--
+  Design plan
+  Color: cool engineering-paper light theme / deep slate dark theme; copper accent;
+  six branch hues (blue, amber, green, red, violet, teal) carried as tokens.
+  Type: IBM Plex Sans for labels, IBM Plex Mono for subs, eyebrows and controls.
+  Layout: full-viewport pan/zoom canvas; root in the middle, three branches
+  per side, SVG bezier wires, fold on click, legend chips toggle branches.
+-->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+  :root {
+    --bg: #eff1f4;
+    --surface: #ffffff;
+    --ink: #1c2330;
+    --muted: #5b6675;
+    --line: #c9d0da;
+    --accent: #b4541e;
+    --b-files: #3565c4;
+    --b-phases: #a87410;
+    --b-dec: #2e7d43;
+    --b-sec: #c23a3a;
+    --b-rules: #7248c9;
+    --b-patch: #0f8a8a;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14171d;
+      --surface: #1d222b;
+      --ink: #e8ebf0;
+      --muted: #97a1b0;
+      --line: #333b48;
+      --accent: #e07a3f;
+      --b-files: #6f9bec;
+      --b-phases: #d9a03f;
+      --b-dec: #57b877;
+      --b-sec: #e06c6c;
+      --b-rules: #a184e8;
+      --b-patch: #45bfbf;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14171d;
+    --surface: #1d222b;
+    --ink: #e8ebf0;
+    --muted: #97a1b0;
+    --line: #333b48;
+    --accent: #e07a3f;
+    --b-files: #6f9bec;
+    --b-phases: #d9a03f;
+    --b-dec: #57b877;
+    --b-sec: #e06c6c;
+    --b-rules: #a184e8;
+    --b-patch: #45bfbf;
+    color-scheme: dark;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  button { font: inherit; color: inherit; }
+  button:focus-visible, .node:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* ── header ─────────────────────────────────────────── */
+  header {
+    flex: none;
+    padding-block: 14px 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  .head-row {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  .ver {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    color: var(--accent);
+    border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+    border-radius: 999px;
+    padding: 1px 9px;
+  }
+  .controls {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-left: auto;
+  }
+  .controls button {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    padding: 4px 10px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    cursor: pointer;
+  }
+  .controls button:hover { border-color: var(--accent); }
+  .legend {
+    display: flex;
+    gap: 6px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-top: 9px;
+    padding-bottom: 2px;
+    min-width: 0;
+  }
+  .chip {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 11px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--surface);
+    cursor: pointer;
+    color: var(--muted);
+  }
+  .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+  .chip[aria-pressed="true"] {
+    color: var(--ink);
+    border-color: color-mix(in srgb, var(--c) 55%, var(--line));
+    background: color-mix(in srgb, var(--c) 10%, var(--surface));
+  }
+
+  /* ── stage / canvas ─────────────────────────────────── */
+  #stage {
+    flex: 1 1 auto;
+    min-height: 380px;
+    position: relative;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+  }
+  #stage.dragging { cursor: grabbing; }
+  #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  #wires { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; }
+
+  .node {
+    position: absolute;
+    border-radius: 10px;
+    padding: 8px 12px 9px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    max-width: 100%;
+  }
+  .node .label {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.25;
+    color: var(--ink);
+  }
+  .node .sub {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    line-height: 1.4;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  .node .count {
+    display: inline-block;
+    margin-left: 7px;
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10px;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 0 6px;
+    vertical-align: 1px;
+  }
+  .node[hidden] { display: none; }
+  .node.foldable { cursor: pointer; }
+  .node.foldable:hover { border-color: color-mix(in srgb, var(--c, var(--accent)) 60%, var(--line)); }
+
+  .node.branch {
+    background: color-mix(in srgb, var(--c) 12%, var(--surface));
+    border-color: color-mix(in srgb, var(--c) 42%, var(--line));
+    padding: 9px 13px 10px;
+  }
+  .node.branch .label { display: flex; align-items: center; gap: 8px; }
+  .node.branch .label::before {
+    content: "";
+    width: 9px; height: 9px;
+    border-radius: 50%;
+    background: var(--c);
+    flex: none;
+  }
+  .node.leaf {
+    width: 250px;
+    background: color-mix(in srgb, var(--c) 7%, var(--surface));
+    border-color: color-mix(in srgb, var(--c) 24%, var(--line));
+    border-left: 3px solid color-mix(in srgb, var(--c) 62%, var(--surface));
+  }
+  .node.root {
+    background: var(--ink);
+    border-color: var(--accent);
+    text-align: center;
+    padding: 13px 18px 14px;
+  }
+  .node.root .label { color: var(--bg); font-size: 16px; }
+  .node.root .sub { color: color-mix(in srgb, var(--bg) 72%, var(--ink)); }
+
+  .hint {
+    position: absolute;
+    left: max(0px, env(safe-area-inset-left, 0px));
+    bottom: max(0px, env(safe-area-inset-bottom, 0px));
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    color: var(--muted);
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 4px 12px;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; }
+  }
+</style>
+
+<div id="app">
+  <header>
+    <div class="head-row">
+      <span class="eyebrow">WinBrew · implementation prompts</span>
+      <h1>Spec mindmap</h1>
+      <span class="ver">v2.3.1</span>
+      <div class="controls">
+        <button id="zout" aria-label="Zoom out">−</button>
+        <button id="zin" aria-label="Zoom in">+</button>
+        <button id="fit">Fit</button>
+        <button id="foldall">Collapse</button>
+        <button id="openall">Expand</button>
+      </div>
+    </div>
+    <div class="legend" id="legend" role="group" aria-label="Branches"></div>
+  </header>
+
+  <div id="stage">
+    <div id="world">
+      <svg id="wires"></svg>
+    </div>
+    <div class="hint">drag to pan · scroll to zoom · click a node to fold</div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ── data ─────────────────────────────────────────────── */
+const BRANCHES = [
+  { id: "files",  c: "--b-files",  side: -1, label: "Files & routing", leaves: [
+    { l: "PROMPT.md",            s: "part A design · part C templates → every session" },
+    { l: "phases/phase-0…f.md",  s: "one file per session" },
+    { l: "RATIONALE.md",         s: "sent with phase 0 & F only" },
+    { l: "CHANGES.md",           s: "owner only — never sent" },
+  ]},
+  { id: "dec",    c: "--b-dec",    side: -1, label: "Locked decisions", leaves: [
+    { l: "D1 · Scope",           s: "v1.0 RC portable · v1.1 installers" },
+    { l: "D2 · Resolver",        s: "PubGrub, pure, catalog snapshot" },
+    { l: "D3 · Versions",        s: "NuGetVersion · interval ranges only" },
+    { l: "D4 · Shim",            s: "native AOT · argv[0] CRT rules · containment" },
+    { l: "D5 · Mutation lock",   s: "processStartTime · no stale breaking" },
+    { l: "D6 · Repo trust",      s: "simplified TUF · sparse index · SQLite catalog" },
+    { l: "D7 · Mark-of-the-Web", s: "none — signatures instead" },
+    { l: "D8 · Uninstall",       s: "refuse with dependents · autoremove" },
+    { l: "D9 · Exit codes",      s: "13 InstallerBusy · 130 cancelled" },
+    { l: "D10 · Config",         s: "typed keys · testing.* rejected in release" },
+    { l: "D11 · Telemetry",      s: "none" },
+  ]},
+  { id: "patch",  c: "--b-patch",  side: -1, label: "v2.3.1 patch", leaves: [
+    { l: "E precedes F",         s: "first release covers v1.0 + lists v1.1" },
+    { l: "self uninstall → D",   s: "installer refusal completes in E" },
+    { l: "catalog info → D",     s: "writesToInstallDir warning" },
+    { l: "bundle --lock",        s: "--locked flag · <bundle>.lock.json" },
+    { l: "Helper requests",      s: "sole arg · untrusted request file" },
+    { l: "Phase 0 additions",    s: "SCL 2.0 stable probe · per-project TFMs" },
+  ]},
+  { id: "phases", c: "--b-phases", side: 1, label: "Phases 0→F", leaves: [
+    { l: "Phase 0 · Plan",       s: "defaults · probes · SQLite schema v1" },
+    { l: "Phase A · CLI & state", s: "config · schemas · lock · doctor" },
+    { l: "Phase B · Lifecycle",  s: "HTTP · archives · shim · journal · self install" },
+    { l: "Phase C · Resolver",   s: "PubGrub · arch selection · upgrade recovery" },
+    { l: "Phase D · Trust",      s: "TUF · sparse catalog · repo · self update/uninstall" },
+    { l: "Phase E · Installers", s: "MSI · EXE · elevated helper (v1.1)" },
+    { l: "Phase F · Release",    s: "docs · CI · SBOM · readiness report" },
+  ]},
+  { id: "sec",    c: "--b-sec",    side: 1, label: "Security pillars", leaves: [
+    { l: "Elevated helper",      s: "refuse, never adopt (A12)" },
+    { l: "Network",              s: "HTTPS-only · manual redirects · per-origin creds" },
+    { l: "Archives",             s: "13 defenses · streaming limits (A13)" },
+    { l: "Signatures",           s: "ECDSA P-256 · SPKI pre-parse · thresholds" },
+    { l: "Test hooks",           s: "compiled out of release (-p:WinBrewTestHooks)" },
+    { l: "No %TEMP% extraction", s: "asserted by test (A4 / A17)" },
+  ]},
+  { id: "rules",  c: "--b-rules",  side: 1, label: "Session rules", leaves: [
+    { l: "One phase per session", s: "in order: 0 A B C D E F" },
+    { l: "Session inputs",       s: "PROMPT.md + one phase file + last checkpoint" },
+    { l: "src → tests split",    s: "default for phases A & B" },
+    { l: "Honesty rules (A2)",   s: "never fabricate builds, tests, checksums" },
+    { l: "Checkpoints (C1/C2)",  s: "INCOMPLETE mid-phase · COMPLETE after tests" },
+  ]},
+];
+
+/* ── dom setup ────────────────────────────────────────── */
+const stage = document.getElementById("stage");
+const world = document.getElementById("world");
+const wires = document.getElementById("wires");
+const legend = document.getElementById("legend");
+
+const nodes = [];
+function makeNode(kind, label, sub, cvar, parentId) {
+  const n = { id: nodes.length, kind, label, sub, cvar, parentId, children: [],
+              cx: 0, cy: 0, w: 0, h: 0, el: document.createElement("div") };
+  n.el.className = "node " + kind;
+  if (cvar) n.el.style.setProperty("--c", "var(" + cvar + ")");
+  const lab = document.createElement("div");
+  lab.className = "label";
+  lab.textContent = label;
+  n.el.appendChild(lab);
+  n.labEl = lab;
+  if (sub) {
+    const s = document.createElement("div");
+    s.className = "sub";
+    s.textContent = sub;
+    n.el.appendChild(s);
+  }
+  world.appendChild(n.el);
+  nodes.push(n);
+  return n;
+}
+
+const root = makeNode("root", "WinBrew", "implementation prompt · v2.3.1", null, null);
+
+const folded = new Set();
+for (const b of BRANCHES) {
+  const bn = makeNode("branch", b.label, null, b.c, root.id);
+  bn.key = b.id; bn.side = b.side;
+  root.children.push(bn);
+  for (const leaf of b.leaves) {
+    const ln = makeNode("leaf", leaf.l, leaf.s, b.c, bn.id);
+    bn.children.push(ln);
+  }
+  const chip = document.createElement("button");
+  chip.className = "chip";
+  chip.style.setProperty("--c", "var(" + b.c + ")");
+  chip.setAttribute("aria-pressed", "true");
+  const dot = document.createElement("span");
+  dot.className = "dot";
+  chip.appendChild(dot);
+  chip.appendChild(document.createTextNode(b.label));
+  chip.addEventListener("click", () => {
+    folded.has(bn.id) ? folded.delete(bn.id) : folded.add(bn.id);
+    chip.setAttribute("aria-pressed", String(!folded.has(bn.id)));
+    render();
+  });
+  legend.appendChild(chip);
+}
+nodes.forEach(n => {
+  if (n.children.length) { n.el.classList.add("foldable"); n.el.title = "click to fold / unfold"; }
+});
+const branchNodes = nodes.filter(n => n.kind === "branch");
+
+/* ── measure ──────────────────────────────────────────── */
+const WIDTHS = { root: 205, branch: 235, leaf: 252 };
+function measure() {
+  for (const n of nodes) {
+    n.el.style.width = WIDTHS[n.kind] + "px";
+    n.w = WIDTHS[n.kind];
+    n.h = n.el.offsetHeight;
+  }
+}
+
+/* ── layout ───────────────────────────────────────────── */
+const GX = 52, GY = 14, GY1 = 40;
+function visible(n) {
+  for (let p = nodes[n.parentId]; p; p = nodes[p.parentId]) if (folded.has(p.id)) return false;
+  return true;
+}
+function subtreeH(n) {
+  if (folded.has(n.id) || !n.children.length) return n.h;
+  let t = 0;
+  for (const c of n.children) t += subtreeH(c);
+  return Math.max(n.h, t + GY * (n.children.length - 1));
+}
+function placeY(n, center) {
+  n.cy = center;
+  if (folded.has(n.id) || !n.children.length) return;
+  const total = n.children.reduce((a, c) => a + subtreeH(c), 0) + GY * (n.children.length - 1);
+  let top = center - total / 2;
+  for (const c of n.children) {
+    placeY(c, top + subtreeH(c) / 2);
+    top += subtreeH(c) + GY;
+  }
+}
+function layout() {
+  root.cx = 0; root.cy = 0;
+  for (const side of [-1, 1]) {
+    const roots = branchNodes.filter(b => b.side === side);
+    const heights = roots.map(subtreeH);
+    const total = heights.reduce((a, h) => a + h, 0) + GY1 * (roots.length - 1);
+    let cursor = -total / 2;
+    roots.forEach((b, i) => {
+      b.cx = side * (root.w / 2 + GX + b.w / 2);
+      placeY(b, cursor + heights[i] / 2);
+      cursor += heights[i] + GY1;
+      if (!folded.has(b.id)) {
+        let top = b.cy - (b.children.reduce((a, c) => a + subtreeH(c), 0) + GY * (b.children.length - 1)) / 2;
+        for (const c of b.children) {
+          c.cx = b.cx + side * (b.w / 2 + GX + c.w / 2);
+          c.cy = top + subtreeH(c) / 2;
+          top += subtreeH(c) + GY;
+        }
+      }
+    });
+  }
+}
+
+/* ── draw ─────────────────────────────────────────────── */
+function render() {
+  layout();
+  const box = { minX: 1e9, minY: 1e9, maxX: -1e9, maxY: -1e9, any: false };
+  let out = "";
+  for (const n of nodes) {
+    const vis = visible(n);
+    n.el.hidden = !vis;
+    n.el.style.left = (n.cx - n.w / 2) + "px";
+    n.el.style.top = (n.cy - n.h / 2) + "px";
+    if (n.children.length) {
+      const cnt = (function count(m) {
+        let t = 0;
+        for (const c of m.children) t += 1 + count(c);
+        return t;
+      })(n);
+      const badge = n.labEl.querySelector(".count") ||
+        (() => { const s = document.createElement("span"); s.className = "count"; n.labEl.appendChild(s); return s; })();
+      if (folded.has(n.id)) { badge.textContent = cnt; badge.hidden = false; }
+      else badge.hidden = true;
+    }
+    if (vis) {
+      box.any = true;
+      box.minX = Math.min(box.minX, n.cx - n.w / 2); box.maxX = Math.max(box.maxX, n.cx + n.w / 2);
+      box.minY = Math.min(box.minY, n.cy - n.h / 2); box.maxY = Math.max(box.maxY, n.cy + n.h / 2);
+    }
+  }
+  for (const n of nodes) {
+    if (!visible(n) || folded.has(n.id) || !n.children.length) continue;
+    for (const c of n.children) {
+      if (!visible(c)) continue;
+      const dir = Math.sign(c.cx - n.cx) || 1;
+      const x1 = n.cx + dir * n.w / 2, y1 = n.cy;
+      const x2 = c.cx - dir * c.w / 2, y2 = c.cy;
+      const mx = (x1 + x2) / 2;
+      const col = c.cvar ? "color-mix(in srgb, var(" + c.cvar + ") 55%, var(--line))" : "var(--line)";
+      out += '<path d="M' + x1.toFixed(1) + " " + y1.toFixed(1) +
+             " C" + mx.toFixed(1) + " " + y1.toFixed(1) + " " + mx.toFixed(1) + " " + y2.toFixed(1) +
+             " " + x2.toFixed(1) + " " + y2.toFixed(1) +
+             '" fill="none" stroke="' + col + '" stroke-width="1.5"/>';
+    }
+  }
+  wires.innerHTML = out;
+  return box;
+}
+
+/* ── view ─────────────────────────────────────────────── */
+let tx = 0, ty = 0, sc = 1;
+function apply() { world.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + sc + ")"; }
+function clampS(v) { return Math.min(1.6, Math.max(0.22, v)); }
+function fit() {
+  const box = render.box;
+  if (!render.box || !render.box.any) return;
+  const vw = stage.clientWidth, vh = stage.clientHeight;
+  sc = clampS(Math.min((vw - 48) / (box.maxX - box.minX), (vh - 48) / (box.maxY - box.minY), 1.15));
+  tx = vw / 2 - sc * (box.minX + box.maxX) / 2;
+  ty = vh / 2 - sc * (box.minY + box.maxY) / 2;
+  apply();
+}
+function zoomAt(f, mx, my) {
+  const s2 = clampS(sc * f);
+  tx = mx - (mx - tx) * (s2 / sc);
+  ty = my - (my - ty) * (s2 / sc);
+  sc = s2;
+  apply();
+}
+
+/* render stores bbox for fit */
+const _render = render;
+render = function () { render.box = _render(); };
+
+/* ── interaction ──────────────────────────────────────── */
+let drag = null;
+stage.addEventListener("pointerdown", e => {
+  drag = { x: e.clientX, y: e.clientY, tx, ty, moved: false, node: e.target.closest(".node") };
+  stage.setPointerCapture(e.pointerId);
+});
+stage.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) > 6) { drag.moved = true; stage.classList.add("dragging"); }
+  if (drag.moved) { tx = drag.tx + dx; ty = drag.ty + dy; apply(); }
+});
+stage.addEventListener("pointerup", e => {
+  if (drag && !drag.moved && drag.node) {
+    const id = +drag.node.getAttribute("data-id");
+    if (id >= 0 && nodes[id] && nodes[id].children.length) {
+      folded.has(id) ? folded.delete(id) : folded.add(id);
+      render();
+    }
+  }
+  stage.classList.remove("dragging");
+  drag = null;
+});
+stage.addEventListener("pointercancel", () => { drag = null; stage.classList.remove("dragging"); });
+stage.addEventListener("wheel", e => {
+  e.preventDefault();
+  const r = stage.getBoundingClientRect();
+  zoomAt(Math.exp(-e.deltaY * 0.0016), e.clientX - r.left, e.clientY - r.top);
+}, { passive: false });
+
+document.getElementById("zin").addEventListener("click", () => zoomAt(1.25, stage.clientWidth / 2, stage.clientHeight / 2));
+document.getElementById("zout").addEventListener("click", () => zoomAt(0.8, stage.clientWidth / 2, stage.clientHeight / 2));
+document.getElementById("fit").addEventListener("click", fit);
+document.getElementById("openall").addEventListener("click", () => { folded.clear(); syncChips(); render(); });
+document.getElementById("foldall").addEventListener("click", () => { branchNodes.forEach(b => folded.add(b.id)); syncChips(); render(); });
+function syncChips() {
+  legend.querySelectorAll(".chip").forEach((ch, i) => {
+    ch.setAttribute("aria-pressed", String(!folded.has(branchNodes[i].id)));
+  });
+}
+
+/* give each node its index for click lookup */
+nodes.forEach((n, i) => n.el.setAttribute("data-id", String(i)));
+
+/* ── boot ─────────────────────────────────────────────── */
+measure();
+if (window.innerWidth < 860) branchNodes.forEach(b => folded.add(b.id));
+syncChips();
+render();
+fit();
+
+if (document.fonts && document.fonts.ready) {
+  document.fonts.ready.then(() => { measure(); render(); fit(); });
+}
+window.addEventListener("resize", fit);
+</script>
