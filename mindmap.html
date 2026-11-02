@@ -157,9 +157,15 @@
   }
 
   /* ── stage / canvas ─────────────────────────────────── */
+  #app {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
   #stage {
     flex: 1 1 auto;
-    min-height: 380px;
+    min-height: 260px;
     position: relative;
     overflow: hidden;
     touch-action: none;
@@ -169,7 +175,8 @@
   }
   #stage.dragging { cursor: grabbing; }
   #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
-  #wires { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; }
+  #world.animated { transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.3, 1); }
+  #wires { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; }
 
   .node {
     position: absolute;
@@ -221,7 +228,6 @@
     flex: none;
   }
   .node.leaf {
-    width: 250px;
     background: color-mix(in srgb, var(--c) 7%, var(--surface));
     border-color: color-mix(in srgb, var(--c) 24%, var(--line));
     border-left: 3px solid color-mix(in srgb, var(--c) 62%, var(--surface));
@@ -274,7 +280,7 @@
     <div id="world">
       <svg id="wires"></svg>
     </div>
-    <div class="hint">drag to pan · scroll to zoom · click a node to fold</div>
+    <div class="hint">drag to pan · scroll to zoom · click a branch to unfold · double-click fits</div>
   </div>
 </div>
 
@@ -387,6 +393,7 @@ for (const b of BRANCHES) {
     folded.has(bn.id) ? folded.delete(bn.id) : folded.add(bn.id);
     chip.setAttribute("aria-pressed", String(!folded.has(bn.id)));
     render();
+    fit(true);
   });
   legend.appendChild(chip);
 }
@@ -498,23 +505,27 @@ function render() {
 
 /* ── view ─────────────────────────────────────────────── */
 let tx = 0, ty = 0, sc = 1;
+function glide(on) {
+  if (on) world.classList.add("animated"); else world.classList.remove("animated");
+  apply();
+}
 function apply() { world.style.transform = "translate(" + tx + "px," + ty + "px) scale(" + sc + ")"; }
 function clampS(v) { return Math.min(1.6, Math.max(0.22, v)); }
-function fit() {
-  const box = render.box;
+function fit(animate) {
   if (!render.box || !render.box.any) return;
+  const box = render.box;
   const vw = stage.clientWidth, vh = stage.clientHeight;
   sc = clampS(Math.min((vw - 48) / (box.maxX - box.minX), (vh - 48) / (box.maxY - box.minY), 1.15));
   tx = vw / 2 - sc * (box.minX + box.maxX) / 2;
   ty = vh / 2 - sc * (box.minY + box.maxY) / 2;
-  apply();
+  glide(animate);
 }
-function zoomAt(f, mx, my) {
+function zoomAt(f, mx, my, animate) {
   const s2 = clampS(sc * f);
   tx = mx - (mx - tx) * (s2 / sc);
   ty = my - (my - ty) * (s2 / sc);
   sc = s2;
-  apply();
+  glide(animate);
 }
 
 /* render stores bbox for fit */
@@ -531,7 +542,7 @@ stage.addEventListener("pointermove", e => {
   if (!drag) return;
   const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
   if (!drag.moved && Math.hypot(dx, dy) > 6) { drag.moved = true; stage.classList.add("dragging"); }
-  if (drag.moved) { tx = drag.tx + dx; ty = drag.ty + dy; apply(); }
+  if (drag.moved) { tx = drag.tx + dx; ty = drag.ty + dy; glide(false); }
 });
 stage.addEventListener("pointerup", e => {
   if (drag && !drag.moved && drag.node) {
@@ -539,23 +550,25 @@ stage.addEventListener("pointerup", e => {
     if (id >= 0 && nodes[id] && nodes[id].children.length) {
       folded.has(id) ? folded.delete(id) : folded.add(id);
       render();
+      fit(true);
     }
   }
   stage.classList.remove("dragging");
   drag = null;
 });
 stage.addEventListener("pointercancel", () => { drag = null; stage.classList.remove("dragging"); });
+stage.addEventListener("dblclick", e => { if (!e.target.closest(".node")) fit(true); });
 stage.addEventListener("wheel", e => {
   e.preventDefault();
   const r = stage.getBoundingClientRect();
-  zoomAt(Math.exp(-e.deltaY * 0.0016), e.clientX - r.left, e.clientY - r.top);
+  zoomAt(Math.exp(-e.deltaY * 0.0016), e.clientX - r.left, e.clientY - r.top, false);
 }, { passive: false });
 
-document.getElementById("zin").addEventListener("click", () => zoomAt(1.25, stage.clientWidth / 2, stage.clientHeight / 2));
-document.getElementById("zout").addEventListener("click", () => zoomAt(0.8, stage.clientWidth / 2, stage.clientHeight / 2));
-document.getElementById("fit").addEventListener("click", fit);
-document.getElementById("openall").addEventListener("click", () => { folded.clear(); syncChips(); render(); });
-document.getElementById("foldall").addEventListener("click", () => { branchNodes.forEach(b => folded.add(b.id)); syncChips(); render(); });
+document.getElementById("zin").addEventListener("click", () => zoomAt(1.25, stage.clientWidth / 2, stage.clientHeight / 2, true));
+document.getElementById("zout").addEventListener("click", () => zoomAt(0.8, stage.clientWidth / 2, stage.clientHeight / 2, true));
+document.getElementById("fit").addEventListener("click", () => fit(true));
+document.getElementById("openall").addEventListener("click", () => { folded.clear(); syncChips(); render(); fit(true); });
+document.getElementById("foldall").addEventListener("click", () => { branchNodes.forEach(b => folded.add(b.id)); syncChips(); render(); fit(true); });
 function syncChips() {
   legend.querySelectorAll(".chip").forEach((ch, i) => {
     ch.setAttribute("aria-pressed", String(!folded.has(branchNodes[i].id)));
@@ -567,10 +580,10 @@ nodes.forEach((n, i) => n.el.setAttribute("data-id", String(i)));
 
 /* ── boot ─────────────────────────────────────────────── */
 measure();
-if (window.innerWidth < 860) branchNodes.forEach(b => folded.add(b.id));
+branchNodes.forEach(b => folded.add(b.id));   // start readable: root + 6 branches
 syncChips();
 render();
-fit();
+fit(true);
 
 if (document.fonts && document.fonts.ready) {
   document.fonts.ready.then(() => { measure(); render(); fit(); });
