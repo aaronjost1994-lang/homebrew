@@ -176,7 +176,7 @@
   #stage.dragging { cursor: grabbing; }
   #world { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
   #world.animated { transition: transform 0.28s cubic-bezier(0.2, 0.7, 0.3, 1); }
-  #wires { position: absolute; left: 0; top: 0; width: 0; height: 0; overflow: visible; pointer-events: none; }
+  #wires { position: absolute; left: -2000px; top: -1500px; width: 4000px; height: 3000px; pointer-events: none; }
 
   .node {
     position: absolute;
@@ -184,7 +184,7 @@
     padding: 8px 12px 9px;
     background: var(--surface);
     border: 1px solid var(--line);
-    max-width: 100%;
+    overflow-wrap: break-word;
   }
   .node .label {
     font-size: 13px;
@@ -278,7 +278,7 @@
 
   <div id="stage">
     <div id="world">
-      <svg id="wires"></svg>
+      <svg id="wires" viewBox="-2000 -1500 4000 3000" aria-hidden="true"></svg>
     </div>
     <div class="hint">drag to pan · scroll to zoom · click a branch to unfold · double-click fits</div>
   </div>
@@ -496,7 +496,7 @@ function render() {
       out += '<path d="M' + x1.toFixed(1) + " " + y1.toFixed(1) +
              " C" + mx.toFixed(1) + " " + y1.toFixed(1) + " " + mx.toFixed(1) + " " + y2.toFixed(1) +
              " " + x2.toFixed(1) + " " + y2.toFixed(1) +
-             '" fill="none" stroke="' + col + '" stroke-width="1.5"/>';
+             '" fill="none" style="stroke:' + col + ';stroke-width:1.5;stroke-linecap:round"/>';
     }
   }
   wires.innerHTML = out;
