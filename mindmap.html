@@ -210,6 +210,7 @@
     padding: 0 6px;
     vertical-align: 1px;
   }
+  .node .count[hidden] { display: none; }
   .node[hidden] { display: none; }
   .node.foldable { cursor: pointer; }
   .node.foldable:hover { border-color: color-mix(in srgb, var(--c, var(--accent)) 60%, var(--line)); }
@@ -257,6 +258,96 @@
   @media (prefers-reduced-motion: reduce) {
     * { transition: none !important; }
   }
+
+  /* ── details panel ──────────────────────────────────── */
+  #panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: min(320px, calc(100% - 24px));
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--pc, var(--accent));
+    border-radius: 12px;
+    padding: 14px 16px 16px;
+    overflow-y: auto;
+    box-shadow: 0 10px 28px color-mix(in srgb, var(--ink) 14%, transparent);
+    z-index: 5;
+  }
+  #panel h3 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    padding-right: 28px;
+  }
+  #panel .psub {
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px;
+    line-height: 1.45;
+    color: var(--muted);
+    margin-top: 3px;
+  }
+  #panel ul {
+    margin: 6px 0 0;
+    padding: 0;
+    list-style: none;
+  }
+  #panel li {
+    position: relative;
+    padding-left: 15px;
+    margin-top: 9px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--ink);
+  }
+  #panel li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.55em;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--pc, var(--accent));
+  }
+  #pclose {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 24px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    font-size: 15px;
+    line-height: 1;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface);
+    color: var(--muted);
+    cursor: pointer;
+  }
+  #pclose:hover { border-color: var(--accent); color: var(--ink); }
+  .node.selected {
+    outline: 2px solid color-mix(in srgb, var(--c, var(--accent)) 60%, transparent);
+    outline-offset: 1px;
+  }
+  @media (max-width: 640px) {
+    #panel {
+      top: auto;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      width: auto;
+      max-height: 58%;
+      border-radius: 14px 14px 0 0;
+      border-left: none;
+      border-right: none;
+      border-bottom: none;
+    }
+  }
 </style>
 
 <div id="app">
@@ -280,7 +371,13 @@
     <div id="world">
       <svg id="wires" viewBox="-2000 -1500 4000 3000" aria-hidden="true"></svg>
     </div>
-    <div class="hint">drag to pan · scroll to zoom · click a branch to unfold · double-click fits</div>
+    <div class="hint">drag to pan · scroll to zoom · click a card: fold or details · double-click fits</div>
+    <aside id="panel" hidden aria-label="Node details">
+      <button id="pclose" aria-label="Close details">×</button>
+      <h3 id="ptitle"></h3>
+      <div class="psub" id="psub"></div>
+      <ul id="plist"></ul>
+    </aside>
   </div>
 </div>
 
@@ -289,56 +386,223 @@
 
 /* ── data ─────────────────────────────────────────────── */
 const BRANCHES = [
-  { id: "files",  c: "--b-files",  side: -1, label: "Files & routing", leaves: [
-    { l: "PROMPT.md",            s: "part A design · part C templates → every session" },
-    { l: "phases/phase-0…f.md",  s: "one file per session" },
-    { l: "RATIONALE.md",         s: "sent with phase 0 & F only" },
-    { l: "CHANGES.md",           s: "owner only — never sent" },
+  { id: "files",  c: "--b-files",  side: -1, label: "Files & routing",
+    sub: "what each session receives — and what it must never see",
+    b: [
+      "Four files, four audiences: sessions read PROMPT.md plus one phase file; the owner alone reads RATIONALE.md and CHANGES.md.",
+      "RATIONALE.md ships only with Phase 0 and Phase F; CHANGES.md never ships (R14).",
+    ],
+    leaves: [
+    { l: "PROMPT.md",            s: "part A design · part C templates → every session",
+      b: [
+        "Part A states the design to build; Part C holds the checkpoint templates (C1 phase report, C2 release readiness).",
+        "Sent to every session — the only always-present context.",
+      ]},
+    { l: "phases/phase-0…f.md",  s: "one file per session",
+      b: [
+        "One file per session, shipped alone beside PROMPT.md; each session implements only its phase's scope.",
+        "Run order: 0, A, B, C, D, E, F — E precedes F (D1 / R17).",
+      ]},
+    { l: "RATIONALE.md",         s: "sent with phase 0 & F only",
+      b: [
+        "Why each rule is what it is, and which alternatives were rejected (R1–R17).",
+        "Sent only with Phase 0 and Phase F — implementation sessions never see it.",
+      ]},
+    { l: "CHANGES.md",           s: "owner only — never sent",
+      b: [
+        "Version history v2.0 → v2.3.1, including the nine review fixes.",
+        "Narrating old bugs risks models reproducing them, so it never ships (R14).",
+      ]},
   ]},
-  { id: "dec",    c: "--b-dec",    side: -1, label: "Locked decisions", leaves: [
-    { l: "D1 · Scope",           s: "v1.0 RC portable · v1.1 installers" },
-    { l: "D2 · Resolver",        s: "PubGrub, pure, catalog snapshot" },
-    { l: "D3 · Versions",        s: "NuGetVersion · interval ranges only" },
-    { l: "D4 · Shim",            s: "native AOT · argv[0] CRT rules · containment" },
-    { l: "D5 · Mutation lock",   s: "processStartTime · no stale breaking" },
-    { l: "D6 · Repo trust",      s: "simplified TUF · sparse index · SQLite catalog" },
-    { l: "D7 · Mark-of-the-Web", s: "none — signatures instead" },
-    { l: "D8 · Uninstall",       s: "refuse with dependents · autoremove" },
-    { l: "D9 · Exit codes",      s: "13 InstallerBusy · 130 cancelled" },
-    { l: "D10 · Config",         s: "typed keys · testing.* rejected in release" },
-    { l: "D11 · Telemetry",      s: "none" },
+  { id: "dec",    c: "--b-dec",    side: -1, label: "Locked decisions",
+    sub: "eleven settled calls (D1–D11) — build them as stated",
+    b: [
+      "D1–D11 are the plan; contradicting evidence is reported to the owner, never designed around (R15).",
+      "Each decision's rejected alternatives live in RATIONALE.md.",
+    ],
+    leaves: [
+    { l: "D1 · Scope",           s: "v1.0 RC portable · v1.1 installers",
+      b: [
+        "v1.0 is a portable per-user RC (zip, no installers); v1.1 adds MSI/EXE and machine scope.",
+        "Feature split, not build order — Phase F verifies v1.0 criteria and lists v1.1 separately (R17).",
+      ]},
+    { l: "D2 · Resolver",        s: "PubGrub, pure, catalog snapshot",
+      b: [
+        "PubGrub runs on an in-memory SQLite snapshot — no I/O during resolution (R2).",
+        "Selected manifests must exactly match index entries, else exit 5 with no changes.",
+      ]},
+    { l: "D3 · Versions",        s: "NuGetVersion · interval ranges only",
+      b: [
+        "NuGetVersion semantics; ranges are intervals — no floating versions.",
+        "'latest' disappeared from the index because it is arch- and prerelease-dependent.",
+      ]},
+    { l: "D4 · Shim",            s: "native AOT · argv[0] CRT rules · containment",
+      b: [
+        "bin\\ entries are copies of a shipped Native AOT shim template, not generated stubs (R3).",
+        "argv[0] follows the MSVC CRT rules — no separator insertion (R5).",
+        "Sidecars resolve inside packages\\; only wbrew.shim.json may target app\\ (R4).",
+      ]},
+    { l: "D5 · Mutation lock",   s: "processStartTime · no stale breaking",
+      b: [
+        "OS lock plus processStartTime defeats PID reuse; torn reads mean 'holder unknown' (R7).",
+        "No stale-lock breaking: the kernel is the only liveness authority.",
+      ]},
+    { l: "D6 · Repo trust",      s: "simplified TUF · sparse index · SQLite catalog",
+      b: [
+        "Simplified TUF: ECDSA P-256, threshold signatures, high-water marks (R8).",
+        "Cargo-style sparse index feeds a SQLite catalog — the resolver's only input.",
+      ]},
+    { l: "D7 · Mark-of-the-Web", s: "none — signatures instead",
+      b: [
+        "No Mark-of-the-Web / zone.identifier checks — signature verification replaces them.",
+      ]},
+    { l: "D8 · Uninstall",       s: "refuse with dependents · autoremove",
+      b: [
+        "Uninstall refuses while other installed packages still depend on the target.",
+        "autoremove removes packages nothing depends on anymore.",
+      ]},
+    { l: "D9 · Exit codes",      s: "13 InstallerBusy · 130 cancelled",
+      b: [
+        "13 InstallerBusy (msiexec 1618), 130 cancelled, 206 shim overflow (R16).",
+        "One table in ExitCodes.cs; cli-reference.md documents it, including the 130-vs-0xC000013A note.",
+      ]},
+    { l: "D10 · Config",         s: "typed keys · testing.* rejected in release",
+      b: [
+        "Typed configuration keys; testing.* keys are rejected by release builds.",
+      ]},
+    { l: "D11 · Telemetry",      s: "none",
+      b: [
+        "None. No telemetry, no phone-home.",
+      ]},
   ]},
-  { id: "patch",  c: "--b-patch",  side: -1, label: "v2.3.1 patch", leaves: [
-    { l: "E precedes F",         s: "first release covers v1.0 + lists v1.1" },
-    { l: "self uninstall → D",   s: "installer refusal completes in E" },
-    { l: "catalog info → D",     s: "writesToInstallDir warning" },
-    { l: "bundle --lock",        s: "--locked flag · <bundle>.lock.json" },
-    { l: "Helper requests",      s: "sole arg · untrusted request file" },
-    { l: "Phase 0 additions",    s: "SCL 2.0 stable probe · per-project TFMs" },
+  { id: "patch",  c: "--b-patch",  side: -1, label: "v2.3.1 patch",
+    sub: "the v2.3.1 review fixes that changed the map",
+    b: [
+      "v2.3.1 shipped nine fixes (see CHANGES.md); these six touch structure or behavior.",
+      "All nine are already folded into PROMPT.md and the phase files.",
+    ],
+    leaves: [
+    { l: "E precedes F",         s: "first release covers v1.0 + lists v1.1",
+      b: [
+        "Order stays 0, A–D, E, F: F's release surface is built once, after E's fixtures and helper exist (R17).",
+        "A portable-only v1.0 can be cut by tagging the tree after Phase D.",
+      ]},
+    { l: "self uninstall → D",   s: "installer refusal completes in E",
+      b: [
+        "Refuses while installer-managed packages remain installed (A14); Phase E completes the refusal.",
+      ]},
+    { l: "catalog info → D",     s: "writesToInstallDir warning",
+      b: [
+        "info warns when a package writes outside its own directory (writesToInstallDir).",
+      ]},
+    { l: "bundle --lock",        s: "--locked flag · <bundle>.lock.json",
+      b: [
+        "bundle install --file <path> --lock <path> [--locked]; default lockfile <bundle>.lock.json (A15).",
+      ]},
+    { l: "Helper requests",      s: "sole arg · untrusted request file",
+      b: [
+        "The elevated helper takes exactly one argument — an untrusted request file (A12).",
+      ]},
+    { l: "Phase 0 additions",    s: "SCL 2.0 stable probe · per-project TFMs",
+      b: [
+        "Probe System.CommandLine 2.0 stability; adopt per-project TFMs — the ninth default decision (R15).",
+      ]},
   ]},
-  { id: "phases", c: "--b-phases", side: 1, label: "Phases 0→F", leaves: [
-    { l: "Phase 0 · Plan",       s: "defaults · probes · SQLite schema v1" },
-    { l: "Phase A · CLI & state", s: "config · schemas · lock · doctor" },
-    { l: "Phase B · Lifecycle",  s: "HTTP · archives · shim · journal · self install" },
-    { l: "Phase C · Resolver",   s: "PubGrub · arch selection · upgrade recovery" },
-    { l: "Phase D · Trust",      s: "TUF · sparse catalog · repo · self update/uninstall" },
-    { l: "Phase E · Installers", s: "MSI · EXE · elevated helper (v1.1)" },
-    { l: "Phase F · Release",    s: "docs · CI · SBOM · readiness report" },
+  { id: "phases", c: "--b-phases", side: 1, label: "Phases 0→F",
+    sub: "seven ordered sessions, each ending in a checkpoint",
+    b: [
+      "One phase per session; A and B split into src and tests sub-sessions by default.",
+      "A phase counts as complete only after its test sub-session passes and the checkpoint says COMPLETE.",
+    ],
+    leaves: [
+    { l: "Phase 0 · Plan",       s: "defaults · probes · SQLite schema v1",
+      b: [
+        "Adopts the nine default decisions; probes SDK, System.CommandLine and SQLite; writes schema v1.",
+      ]},
+    { l: "Phase A · CLI & state", s: "config · schemas · lock · doctor",
+      b: [
+        "Command surface, config, schemas, mutation lock, doctor.",
+      ]},
+    { l: "Phase B · Lifecycle",  s: "HTTP · archives · shim · journal · self install",
+      b: [
+        "HTTP client, archive extraction, shim install, journal — self install end to end.",
+      ]},
+    { l: "Phase C · Resolver",   s: "PubGrub · arch selection · upgrade recovery",
+      b: [
+        "PubGrub resolver, architecture selection, upgrade recovery.",
+      ]},
+    { l: "Phase D · Trust",      s: "TUF · sparse catalog · repo · self update/uninstall",
+      b: [
+        "TUF verification, sparse catalog, repo management, self update / uninstall.",
+      ]},
+    { l: "Phase E · Installers", s: "MSI · EXE · elevated helper (v1.1)",
+      b: [
+        "MSI and EXE models, elevated helper, fixture installers in CI (v1.1).",
+      ]},
+    { l: "Phase F · Release",    s: "docs · CI · SBOM · readiness report",
+      b: [
+        "Docs, ci/release workflows, SBOM, signing, readiness report (C2).",
+      ]},
   ]},
-  { id: "sec",    c: "--b-sec",    side: 1, label: "Security pillars", leaves: [
-    { l: "Elevated helper",      s: "refuse, never adopt (A12)" },
-    { l: "Network",              s: "HTTPS-only · manual redirects · per-origin creds" },
-    { l: "Archives",             s: "13 defenses · streaming limits (A13)" },
-    { l: "Signatures",           s: "ECDSA P-256 · SPKI pre-parse · thresholds" },
-    { l: "Test hooks",           s: "compiled out of release (-p:WinBrewTestHooks)" },
-    { l: "No %TEMP% extraction", s: "asserted by test (A4 / A17)" },
+  { id: "sec",    c: "--b-sec",    side: 1, label: "Security pillars",
+    sub: "test-enforced guarantees, not documentation",
+    b: [
+      "Every pillar lands in a phase acceptance list with a concrete test or evidence artifact.",
+      "Where a test cannot prove a claim, the readiness report says so explicitly.",
+    ],
+    leaves: [
+    { l: "Elevated helper",      s: "refuse, never adopt (A12)",
+      b: [
+        "Refuse, never adopt: owner + DACL checks on opened handles; ERROR_ALREADY_EXISTS re-checks (R6).",
+        "No ACL outside helper-created directories is ever changed — proven by before/after snapshots.",
+      ]},
+    { l: "Network",              s: "HTTPS-only · manual redirects · per-origin creds",
+      b: [
+        "HTTPS-only, manual redirects, per-origin credentials; the localhost exception stays compiled out (R12).",
+      ]},
+    { l: "Archives",             s: "13 defenses · streaming limits (A13)",
+      b: [
+        "13 defenses with streaming limits (A13): entry names, traversal, ratios, size caps.",
+      ]},
+    { l: "Signatures",           s: "ECDSA P-256 · SPKI pre-parse · thresholds",
+      b: [
+        "ECDSA P-256 P1363, exact-payload envelopes, SPKI pre-parsed via Asn1, 64-byte rule, thresholds (R8).",
+      ]},
+    { l: "Test hooks",           s: "compiled out of release (-p:WinBrewTestHooks)",
+      b: [
+        "Fault injection lives behind -p:WinBrewTestHooks; a reflection test proves release builds lack it (R9).",
+      ]},
+    { l: "No %TEMP% extraction", s: "asserted by test (A4 / A17)",
+      b: [
+        "Native DLLs ship side-by-side; a test asserts nothing is ever extracted (A4 / A17, R1).",
+      ]},
   ]},
-  { id: "rules",  c: "--b-rules",  side: 1, label: "Session rules", leaves: [
-    { l: "One phase per session", s: "in order: 0 A B C D E F" },
-    { l: "Session inputs",       s: "PROMPT.md + one phase file + last checkpoint" },
-    { l: "src → tests split",    s: "default for phases A & B" },
-    { l: "Honesty rules (A2)",   s: "never fabricate builds, tests, checksums" },
-    { l: "Checkpoints (C1/C2)",  s: "INCOMPLETE mid-phase · COMPLETE after tests" },
+  { id: "rules",  c: "--b-rules",  side: 1, label: "Session rules",
+    sub: "how every session must run and report",
+    b: [
+      "These bind every phase session, from PROMPT.md Part A and the context-management rules.",
+    ],
+    leaves: [
+    { l: "One phase per session", s: "in order: 0 A B C D E F",
+      b: [
+        "Strict order 0, A, B, C, D, E, F — no skipping (D1).",
+      ]},
+    { l: "Session inputs",       s: "PROMPT.md + one phase file + last checkpoint",
+      b: [
+        "PROMPT.md + one phase file + the previous checkpoint; nothing else enters context.",
+      ]},
+    { l: "src → tests split",    s: "default for phases A & B",
+      b: [
+        "Production code first, mid-phase INCOMPLETE checkpoint, tests in the immediate continuation.",
+      ]},
+    { l: "Honesty rules (A2)",   s: "never fabricate builds, tests, checksums",
+      b: [
+        "Never fabricate builds, tests or checksums; report real output, or say it did not run.",
+      ]},
+    { l: "Checkpoints (C1/C2)",  s: "INCOMPLETE mid-phase · COMPLETE after tests",
+      b: [
+        "C1 per phase (INCOMPLETE mid-phase, COMPLETE after tests); C2 is the release readiness report (A19).",
+      ]},
   ]},
 ];
 
@@ -371,14 +635,20 @@ function makeNode(kind, label, sub, cvar, parentId) {
 }
 
 const root = makeNode("root", "WinBrew", "implementation prompt · v2.3.1", null, null);
+root.bullets = [
+  "Interactive map of the WinBrew implementation prompt set (v2.3.1) — click any card for what it means.",
+  "Every session gets PROMPT.md + one phase file + the previous checkpoint — nothing else.",
+  "The design is locked (A§ / D§): build what it says and report contradictions, never deviations.",
+];
 
 const folded = new Set();
 for (const b of BRANCHES) {
-  const bn = makeNode("branch", b.label, null, b.c, root.id);
-  bn.key = b.id; bn.side = b.side;
+  const bn = makeNode("branch", b.label, b.sub || null, b.c, root.id);
+  bn.key = b.id; bn.side = b.side; bn.bullets = b.b || [];
   root.children.push(bn);
   for (const leaf of b.leaves) {
     const ln = makeNode("leaf", leaf.l, leaf.s, b.c, bn.id);
+    ln.bullets = leaf.b || [];
     bn.children.push(ln);
   }
   const chip = document.createElement("button");
@@ -398,7 +668,7 @@ for (const b of BRANCHES) {
   legend.appendChild(chip);
 }
 nodes.forEach(n => {
-  if (n.children.length) { n.el.classList.add("foldable"); n.el.title = "click to fold / unfold"; }
+  if (n.children.length) { n.el.classList.add("foldable"); n.el.title = "click: fold / unfold · details"; }
 });
 const branchNodes = nodes.filter(n => n.kind === "branch");
 
@@ -468,7 +738,7 @@ function render() {
     n.el.hidden = !vis;
     n.el.style.left = (n.cx - n.w / 2) + "px";
     n.el.style.top = (n.cy - n.h / 2) + "px";
-    if (n.children.length) {
+    if (n.children.length && n.kind !== "root") {   // root never folds — no badge
       const cnt = (function count(m) {
         let t = 0;
         for (const c of m.children) t += 1 + count(c);
@@ -548,10 +818,14 @@ stage.addEventListener("pointermove", e => {
 stage.addEventListener("pointerup", e => {
   if (drag && !drag.moved && drag.node) {
     const id = +drag.node.getAttribute("data-id");
-    if (id >= 0 && nodes[id] && nodes[id].children.length) {
-      folded.has(id) ? folded.delete(id) : folded.add(id);
-      render();
-      fit(true);
+    if (id >= 0 && nodes[id]) {
+      const n = nodes[id];
+      if (n.children.length && n.kind !== "root") {
+        folded.has(id) ? folded.delete(id) : folded.add(id);
+        render();
+        fit(true);
+      }
+      showPanel(n);
     }
   }
   stage.classList.remove("dragging");
@@ -575,6 +849,36 @@ function syncChips() {
     ch.setAttribute("aria-pressed", String(!folded.has(branchNodes[i].id)));
   });
 }
+
+/* ── details panel ─────────────────────────────────────── */
+const panelEl = document.getElementById("panel");
+const ptitle = document.getElementById("ptitle");
+const psub = document.getElementById("psub");
+const plist = document.getElementById("plist");
+let selected = null;
+function showPanel(n) {
+  if (selected) selected.el.classList.remove("selected");
+  selected = n;
+  n.el.classList.add("selected");
+  panelEl.style.setProperty("--pc", n.cvar ? "var(" + n.cvar + ")" : "var(--accent)");
+  ptitle.textContent = n.label;
+  psub.textContent = n.sub || "";
+  psub.hidden = !n.sub;
+  plist.innerHTML = "";
+  for (const t of n.bullets || []) {
+    const li = document.createElement("li");
+    li.textContent = t;
+    plist.appendChild(li);
+  }
+  panelEl.hidden = false;
+  panelEl.scrollTop = 0;
+}
+function closePanel() {
+  panelEl.hidden = true;
+  if (selected) { selected.el.classList.remove("selected"); selected = null; }
+}
+document.getElementById("pclose").addEventListener("click", closePanel);
+window.addEventListener("keydown", e => { if (e.key === "Escape") closePanel(); });
 
 /* give each node its index for click lookup */
 nodes.forEach((n, i) => n.el.setAttribute("data-id", String(i)));
