@@ -408,7 +408,8 @@ function measure() {
   for (const n of nodes) {
     n.el.style.width = WIDTHS[n.kind] + "px";
     n.w = WIDTHS[n.kind];
-    n.h = n.el.offsetHeight;
+    const h = n.el.offsetHeight;
+    if (h > 0) n.h = h;   // hidden nodes report 0 — keep the real height
   }
 }
 
