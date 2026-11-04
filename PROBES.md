@@ -57,6 +57,44 @@ whether the project owner qualifies (individual vs organization
 identity, regional availability) can only be confirmed by starting
 that process — not probeable from here.
 
+## 4. Local build environment probe (Linux, 2026-11-04)
+
+Validates PLAN.md §4's TFM table empirically with a scratch
+TFM-matrix solution **outside this repository** (SDK **10.0.301**,
+linux-x64, at `/root/.dotnet`, not on PATH):
+
+- `net10.0` and `net10.0-windows` classlibs **build clean** on Linux;
+  `Microsoft.Win32.Registry` compiles from a `net10.0-windows` project
+  **with no extra package** (the TFM targeting pack provides it).
+- `net10.0` xunit tests pass (NuGetVersion `ToNormalizedString()`
+  per D3); a `net10.0-windows` **test** project builds and runs on
+  Linux: SQLite in-memory + **WAL file db** work with
+  `Microsoft.Data.Sqlite`'s bundled e_sqlite3 — the A6 storage stack
+  is viable cross-plat.
+- Off-Windows runtime: `Registry.GetValue` throws
+  **PlatformNotSupportedException** ("Registry is not supported on
+  this platform.") — observed, and the CA1416 platform analyzer
+  flags such call sites correctly.
+- **Native AOT (the D4 shim):** publishing `win-x64` from Linux is
+  refused with `error : Cross-OS native compilation is not supported`
+  — **shim binaries require Windows** (or Windows CI runners, A16).
+  The control (`linux-x64` AOT) publishes fine, so the toolchain
+  itself works; only cross-OS is blocked.
+
+Security findings from restore (NU1903, high severity):
+- `SQLitePCLRaw.lib.e_sqlite3` **2.1.10** — GHSA-2m69-gcr7-jv3q.
+  Phase A must pin a patched bundle; note the **FTS5 probe (§2 item
+  2 / default decision 2) runs against whatever bundle is pinned**,
+  so the probe must be re-run on the pinned version, not assumed
+  from any other build.
+- `Microsoft.DotNet.ILCompiler` **10.0.9** — GHSA-p3jp-9v83-76w9.
+  Pin a patched ILCompiler before the shim's release build (Phase F).
+
+Consequence for PLAN.md: everything in §4 is verifiable on this
+Linux box except **shim AOT binaries and Windows-runtime suites**
+(registry, ACL, Restart Manager, E2E) — those need Windows 11 or
+Windows runners, exactly as the plan's disclosure already states.
+
 ---
 
 Not probeable from here, still on the owner: the A1 trademark/name

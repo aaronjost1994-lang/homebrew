@@ -7,10 +7,12 @@ are recorded, not applied.
 **Session disclosure (honesty rules, A2).** This draft was produced
 inside a working session that also maintains the prompt file set —
 not a fresh session started with exactly `PROMPT.md` +
-`phases/phase-0.md` + `RATIONALE.md` — and on a Linux host with no
-.NET SDK. Phase 0 requires no builds, so nothing is unverified *because*
-of that; the external probes are document/web-based and recorded with
-sources in `PROBES.md`. If the owner prefers, `phases/phase-0.md` can
+`phases/phase-0.md` + `RATIONALE.md` — and on a Linux host (a
+.NET 10.0.301 SDK exists here, off PATH). Phase 0 requires no
+WinBrew builds; the plan's environment assumptions were validated
+with a scratch TFM-matrix solution outside this repository — builds,
+tests, and Native AOT attempts, evidence in `PROBES.md` §4. If the
+owner prefers, `phases/phase-0.md` can
 be re-run in a dedicated session using this file and `PROBES.md` as
 prior evidence; the deliverables below are structured to survive that.
 
@@ -412,10 +414,15 @@ when its test sub-session passes (C1 COMPLETE).
 
 - **Status:** COMPLETE for Phase 0's deliverables *as a draft* —
   pending the owner's approval, which is this phase's acceptance gate.
-- **Builds/tests run:** none — Phase 0 is plan-only; external probes
-  are documented with sources in `PROBES.md` (SCL 2.0.11; ARM64
-  runner public-only, this repo private today; Trusted Signing name
-  unrenamed in docs).
+- **Builds/tests run:** no WinBrew builds (Phase 0 is plan-only).
+  Environment validation: scratch TFM-matrix builds, xunit runs, and
+  Native AOT attempts on .NET 10.0.301/Linux — all pass except
+  win-x64 AOT, which is refused off-Windows (cross-OS), so **shim
+  binaries and Windows-runtime suites need Windows**. Evidence:
+  `PROBES.md` §4, including two NU1903 high-severity advisories the
+  NuGet pins must address. External probes are in `PROBES.md` §1–3
+  (SCL 2.0.11; ARM64 runner public-only, this repo private today;
+  Trusted Signing name unrenamed in docs).
 - **Evidence anchors:** A5 (tree/edges), A6 (storage/WAL/migrations),
   A9/A10 (identity, edges, explicit flag, one active version),
   A11 (journal, state machine, checkpoints), A12 (PATH, helper),
