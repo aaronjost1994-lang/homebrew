@@ -94,13 +94,16 @@ Each default below is **adopted**. Contradicting evidence is flagged.
    forbidding option: the sparse-index model invites community repo
    layering, qualification checks are cheap (store the verbatim
    string, resolve at plan time), and a hard forbid would break it
-   in v1.0 with no security gain — unqualified refs are already
-   rejected. *Adopted; revisit only if a real repo ecosystem asks.*
+   in v1.0 with no security gain: unqualified refs are permanently
+   scoped to the declaring repository (A9), and cross-repo resolution
+   fails closed with exit 3 when the target repo is unconfigured.
+   *Adopted; revisit only if a real repo ecosystem asks.*
 8. **E2E over HTTPS with a per-job test CA** installed into
    `LocalMachine\Root` on disposable runners (A16). *Adopted; if the
    owner's security policy forbids installing a test root CA, the
-   fallback (documented HTTP + local proxy) must be reported back
-   here before Phase B.*
+   plan reports it back and an alternative trusted-HTTPS approach is
+   designed with the owner before Phase B (the spec's own
+   requirement; no specific fallback is assumed here).*
 9. **System.CommandLine: stable 2.0 GA exists; record 2.0.11**
    (nuget.org, fetched 2026-11-04; latest of `2.0.0`…`2.0.11`;
    3.0 previews are out of scope). The "no stable release" branch of
@@ -167,9 +170,9 @@ accepted-version high-water marks (D6). `catalog_*` rows +
 CREATE TABLE repositories (
   name       TEXT PRIMARY KEY,          -- short name; used in paths (A6)
   url        TEXT NOT NULL,
-  root_version INTEGER NOT NULL,        -- accepted root.json version
   created_at TEXT NOT NULL              -- ISO-8601, UTC
 );
+-- root accepted-version lives in role_versions, like every role (D6)
 
 -- per-role replay protection (D6): reject any version below the mark
 CREATE TABLE role_versions (
@@ -196,7 +199,7 @@ CREATE INDEX idx_pkg_search ON catalog_packages(search_text);
 CREATE TABLE catalog_versions (
   repo        TEXT NOT NULL REFERENCES repositories(name) ON DELETE CASCADE,
   package_id  TEXT NOT NULL,
-  version     TEXT NOT NULL,            -- normalized SemVer 2 text
+  version     TEXT NOT NULL,            -- NuGetVersion ToNormalizedString() (D3)
   manifest_sha256 TEXT NOT NULL,
   manifest_size   INTEGER NOT NULL,
   is_prerelease   INTEGER NOT NULL,     -- derived at ingest for
@@ -223,7 +226,7 @@ CREATE TABLE catalog_dependencies (
   package_id  TEXT NOT NULL,
   version     TEXT NOT NULL,
   dep_id      TEXT NOT NULL,            -- as written; may be repo-qualified
-  dep_range   TEXT NOT NULL,            -- version range, verbatim
+  dep_range   TEXT NOT NULL,            -- NuGet interval notation, verbatim (D3)
   position    INTEGER NOT NULL,         -- preserves manifest order
   PRIMARY KEY (repo, package_id, version, position),
   FOREIGN KEY (repo, package_id, version) REFERENCES catalog_versions
