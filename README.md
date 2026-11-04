@@ -23,6 +23,7 @@ resolution), Cargo's sparse index (catalog model).
 | `phases/phase-a.md` … `phases/phase-f.md` | One phase prompt each | Its own session only |
 | `RATIONALE.md` | Why each decision was made | Phase 0 and Phase F only |
 | `CHANGES.md` | Changelogs, review traceability | Never (owner only) |
+| `PROBES.md` | Phase 0 external-probe pre-work (dated answers + sources) | Never (owner only) |
 
 ## Session rules
 
