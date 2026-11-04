@@ -89,6 +89,19 @@ Security findings from restore (NU1903, high severity):
   from any other build.
 - `Microsoft.DotNet.ILCompiler` **10.0.9** — GHSA-p3jp-9v83-76w9.
   Pin a patched ILCompiler before the shim's release build (Phase F).
+  **Follow-up (2026-11-05, during Phase A build):** the advisory is
+  CVE-2026-111497 (.NET Brotli decoder OOB write, CWE-787, HIGH);
+  patched in **10.0.14** for the 10.0.x line — same patch level the
+  runtime packs need (`Microsoft.NETCore.App.Runtime.*` 10.0.9 is in
+  the same vulnerable range, and the per-RID locked restores would
+  trip the identical NU1903). Central package management **cannot**
+  pin SDK-injected packages (NU1009: `Microsoft.DotNet.ILCompiler` is
+  implicitly referenced by the PublishAot targets from
+  `MicrosoftNETCoreSdk.BundledVersions.props`, `ILCompilerPackVersion`
+  = the SDK's bundled version). The only clean fix is a newer SDK:
+  Phase A bumps the build from SDK **10.0.301** to the latest 10.0.x
+  (bundling ILCompiler/runtime ≥ 10.0.14) and updates global.json
+  accordingly. Windows runners must use an SDK ≥ that patch level too.
 
 Consequence for PLAN.md: everything in §4 is verifiable on this
 Linux box except **shim AOT binaries and Windows-runtime suites**
