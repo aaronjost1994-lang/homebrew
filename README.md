@@ -24,6 +24,7 @@ resolution), Cargo's sparse index (catalog model).
 | `RATIONALE.md` | Why each decision was made | Phase 0 and Phase F only |
 | `CHANGES.md` | Changelogs, review traceability | Never (owner only) |
 | `PROBES.md` | Phase 0 external-probe pre-work (dated answers + sources) | Never (owner only) |
+| `PLAN.md` | Phase 0 plan draft — schema v1, TFMs, checkpoints, phase estimates | Never (owner only) |
 
 ## Session rules
 
