@@ -45,6 +45,14 @@ resolution), Cargo's sparse index (catalog model).
 | E (v1.1) | MSI/EXE installers, elevated helper (refuse-never-adopt), `self uninstall` refusal |
 | F | Documentation, CI/release workflows, SBOM, signing, release-readiness report |
 
+## Owner tools
+
+- `mindmap.html` — interactive map of the spec, open in a browser.
+  Root + six branches (files, decisions, v2.3.1 patch, phases,
+  security pillars, session rules); click any card for its detail
+  bullets, legend chips fold branches. Owner-side only — it is not
+  part of the file routing above and is never sent to sessions.
+
 ## Provenance
 
 v2.0 (2026-11-01) → v2.3 through two review rounds (30 + 18 findings,
