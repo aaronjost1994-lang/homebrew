@@ -391,7 +391,7 @@ const BRANCHES = [
   { id: "files",  c: "--b-files",  side: -1, label: "Files & routing",
     sub: "what each session receives — and what it must never see",
     b: [
-      "Four files, four audiences: sessions read PROMPT.md plus one phase file; the owner alone reads RATIONALE.md and CHANGES.md.",
+      "Four files, four audiences: every session reads PROMPT.md plus one phase file; CHANGES.md never leaves the owner's hands.",
       "RATIONALE.md ships only with Phase 0 and Phase F; CHANGES.md never ships (R14).",
     ],
     leaves: [
@@ -412,14 +412,14 @@ const BRANCHES = [
       ]},
     { l: "CHANGES.md",           s: "owner only — never sent",
       b: [
-        "Version history v2.0 → v2.3.1, including the nine review fixes.",
+        "Version history v2.0 → v2.3.1, including the nine v2.3.1 consistency fixes.",
         "Narrating old bugs risks models reproducing them, so it never ships (R14).",
       ]},
   ]},
   { id: "dec",    c: "--b-dec",    side: -1, label: "Locked decisions",
     sub: "eleven settled calls (D1–D11) — build them as stated",
     b: [
-      "D1–D11 are the plan; contradicting evidence is reported to the owner, never designed around (R15).",
+      "D1–D11 are the plan; contradicting evidence is reported to the owner, never designed around (A7).",
       "Each decision's rejected alternatives live in RATIONALE.md.",
     ],
     leaves: [
@@ -480,7 +480,7 @@ const BRANCHES = [
   { id: "patch",  c: "--b-patch",  side: -1, label: "v2.3.1 patch",
     sub: "the v2.3.1 review fixes that changed the map",
     b: [
-      "v2.3.1 shipped nine fixes (see CHANGES.md); these six touch structure or behavior.",
+      "v2.3.1 shipped nine consistency fixes (see CHANGES.md); the six below changed behavior, assignments or syntax.",
       "All nine are already folded into PROMPT.md and the phase files.",
     ],
     leaves: [
@@ -495,7 +495,7 @@ const BRANCHES = [
       ]},
     { l: "catalog info → D",     s: "writesToInstallDir warning",
       b: [
-        "info warns when a package writes outside its own directory (writesToInstallDir).",
+        "info warns when a package writes state inside its install directory — it won't survive upgrades (A9).",
       ]},
     { l: "bundle --lock",        s: "--locked flag · <bundle>.lock.json",
       b: [
@@ -507,7 +507,7 @@ const BRANCHES = [
       ]},
     { l: "Phase 0 additions",    s: "SCL 2.0 stable probe · per-project TFMs",
       b: [
-        "Probe System.CommandLine 2.0 stability; adopt per-project TFMs — the ninth default decision (R15).",
+        "Probe System.CommandLine 2.0 stability (default decision 9); per-project TFMs join the deliverables (R15).",
       ]},
   ]},
   { id: "phases", c: "--b-phases", side: 1, label: "Phases 0→F",
@@ -519,7 +519,7 @@ const BRANCHES = [
     leaves: [
     { l: "Phase 0 · Plan",       s: "defaults · probes · SQLite schema v1",
       b: [
-        "Adopts the nine default decisions; probes SDK, System.CommandLine and SQLite; writes schema v1.",
+        "Adopts the nine default decisions; probes ARM64 runners, signing eligibility and the stable System.CommandLine; writes schema v1.",
       ]},
     { l: "Phase A · CLI & state", s: "config · schemas · lock · doctor",
       b: [
@@ -562,9 +562,9 @@ const BRANCHES = [
       b: [
         "HTTPS-only, manual redirects, per-origin credentials; the localhost exception stays compiled out (R12).",
       ]},
-    { l: "Archives",             s: "13 defenses · streaming limits (A13)",
+    { l: "Archives",             s: "every A13 defense · streaming limits",
       b: [
-        "13 defenses with streaming limits (A13): entry names, traversal, ratios, size caps.",
+        "Every A13 defense, enforced while streaming: entry names, traversal, ratios, size caps — one test per defense (A13, Phase B).",
       ]},
     { l: "Signatures",           s: "ECDSA P-256 · SPKI pre-parse · thresholds",
       b: [
