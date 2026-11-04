@@ -37,7 +37,7 @@ resolution), Cargo's sparse index (catalog model).
 
 | Phase | Deliverable |
 |---|---|
-| 0 | Plan, default decisions, probes (FTS5, ARM64 runners, signing route, System.CommandLine 2.0), SQLite schema v1 |
+| 0 | Plan, default decisions, probes (ARM64 runners, signing route, System.CommandLine 2.0), SQLite schema v1 |
 | A | CLI scaffolding, config, JSON schemas, SQLite + migrations, mutation lock, `doctor`, FTS5 probe |
 | B | Secure portable lifecycle: HTTP client, cache, archive defenses, Native AOT shim, journal/recovery, `self install` |
 | C | PubGrub resolver, architecture selection/re-selection, pins, cycles, upgrade compensation |
