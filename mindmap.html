@@ -134,7 +134,9 @@
     margin-top: 9px;
     padding-bottom: 2px;
     min-width: 0;
+    scrollbar-width: none;
   }
+  .legend::-webkit-scrollbar { display: none; }
   .chip {
     flex: none;
     display: inline-flex;
@@ -815,18 +817,20 @@ stage.addEventListener("pointermove", e => {
   if (!drag.moved && Math.hypot(dx, dy) > 6) { drag.moved = true; stage.classList.add("dragging"); }
   if (drag.moved) { tx = drag.tx + dx; ty = drag.ty + dy; glide(false); }
 });
+function activate(n) {
+  if (n.children.length && n.kind !== "root") {
+    folded.has(n.id) ? folded.delete(n.id) : folded.add(n.id);
+    render();
+    fit(true);
+  }
+  showPanel(n);
+}
 stage.addEventListener("pointerup", e => {
-  if (drag && !drag.moved && drag.node) {
-    const id = +drag.node.getAttribute("data-id");
-    if (id >= 0 && nodes[id]) {
-      const n = nodes[id];
-      if (n.children.length && n.kind !== "root") {
-        folded.has(id) ? folded.delete(id) : folded.add(id);
-        render();
-        fit(true);
-      }
-      showPanel(n);
-    }
+  if (drag && !drag.moved) {
+    if (drag.node) {
+      const id = +drag.node.getAttribute("data-id");
+      if (id >= 0 && nodes[id]) activate(nodes[id]);
+    } else closePanel();   // a click on empty canvas puts the panel away
   }
   stage.classList.remove("dragging");
   drag = null;
@@ -880,8 +884,17 @@ function closePanel() {
 document.getElementById("pclose").addEventListener("click", closePanel);
 window.addEventListener("keydown", e => { if (e.key === "Escape") closePanel(); });
 
-/* give each node its index for click lookup */
-nodes.forEach((n, i) => n.el.setAttribute("data-id", String(i)));
+/* give each node its index for click lookup; make it keyboard-operable */
+nodes.forEach((n, i) => {
+  n.el.setAttribute("data-id", String(i));
+  n.el.tabIndex = 0;
+  n.el.setAttribute("role", "button");
+  n.el.addEventListener("keydown", e => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    e.preventDefault();
+    activate(n);
+  });
+});
 
 /* ── boot ─────────────────────────────────────────────── */
 measure();
