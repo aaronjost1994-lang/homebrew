@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:winbrew:schema:cli-output.v1",
+  "title": "WinBrew CLI JSON output envelope v1",
+  "description": "With --json, stdout carries exactly ONE JSON document following this schema (A8). Versioned separately from the manifest schema. Progress/decoration never appear on stdout with --json.",
+  "type": "object",
+  "required": ["schemaVersion", "command", "ok"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "command": { "type": "string", "description": "The invoked command, e.g. 'list', 'config get', 'repo add'." },
+    "ok": { "type": "boolean" },
+    "data": { "type": ["object", "array", "null"], "description": "Present when ok is true." },
+    "warnings": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Non-fatal notices (e.g. x86 fallback, expired metadata served offline)."
+    },
+    "error": {
+      "type": "object",
+      "required": ["code", "name", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "code": { "type": "integer", "description": "Exit code per D9 (WinBrew.Cli/ExitCodes.cs is the single mapping)." },
+        "name": { "type": "string" },
+        "message": { "type": "string" },
+        "details": { "type": "object" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "ok": { "const": true } } },
+      "then": { "properties": { "error": { "not": {} } } }
+    },
+    {
+      "if": { "properties": { "ok": { "const": false } } },
+      "then": { "required": ["error"], "properties": { "data": { "not": {} } } }
+    }
+  ]
+}

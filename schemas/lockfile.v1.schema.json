@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:winbrew:schema:lockfile.v1",
+  "title": "WinBrew lockfile v1",
+  "description": "Exact resolved selection for bundle install --locked (A15): never re-resolves; fetches exact manifests and checks digests; fails clearly on any missing or different entry.",
+  "type": "object",
+  "required": ["schemaVersion", "repositories", "packages"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "winbrewVersion": { "type": "string", "description": "The wbrew version that produced the lockfile (informational)." },
+    "repositories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "url", "rootKeyFingerprints"],
+        "additionalProperties": false,
+        "properties": {
+          "name": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$" },
+          "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "rootKeyFingerprints": {
+            "type": "array",
+            "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "minItems": 1,
+            "uniqueItems": true,
+            "description": "Repository identity: root key fingerprints at lock time (A15)."
+          }
+        }
+      }
+    },
+    "packages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "repo", "id", "version", "architecture",
+          "manifestSha256", "artifactUrl", "artifactSha256", "explicit"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "repo": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$" },
+          "id": { "type": "string" },
+          "version": { "type": "string", "description": "Normalized NuGetVersion (D3)." },
+          "architecture": { "enum": ["x64", "arm64", "x86"], "description": "Re-selection is recorded here (A10)." },
+          "manifestSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "artifactUrl": { "type": "string", "format": "uri" },
+          "artifactSha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "explicit": { "type": "boolean", "description": "True = requested; false = pulled as dependency (A10)." }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+# WinBrew publish-output manifest (A4/R13) — recorded in the Phase A src
+# sub-session (2026-11-05, Linux build host, SDK 10.0.403).
+#
+# `dotnet publish src/WinBrew.Cli -c Release -r <rid> --self-contained true`
+# produces EXACTLY this set (single-file managed bundle; no native
+# self-extraction — e_sqlite3.dll sits next to wbrew.exe):
+#
+#   wbrew.exe                    managed single-file bundle (PublishSingleFile,
+#                                IncludeNativeLibrariesForSelfExtract=false)
+#   e_sqlite3.dll                native SQLite, loaded from beside wbrew.exe
+#   wbrew.pdb                    debug symbols (NOT shipped in the release zip)
+#   WinBrew.Core.pdb             (NOT shipped)
+#   WinBrew.Application.pdb      (NOT shipped)
+#   WinBrew.Infrastructure.pdb   (NOT shipped)
+#   WinBrew.Windows.pdb          (NOT shipped)
+#
+# The release zip (A14/A18) contains: wbrew.exe, e_sqlite3.dll,
+# wbrew-shim.exe — i.e. this set minus *.pdb, plus the Native AOT shim.
+#
+# wbrew-shim.exe is NOT part of this Linux-hosted publish output: Native AOT
+# cross-OS compilation is refused ("Cross-OS native compilation is not
+# supported", PROBES.md §4). It is produced by the Windows CI publish job
+# (dotnet publish src/WinBrew.Shim -c Release -r <rid>) and verified there.
+#
+# A CI test must fail if the publish output ever differs from this manifest.

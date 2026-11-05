@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetPlatformIdentifier>Windows</TargetPlatformIdentifier>
+    <TargetPlatformVersion>10.0.22000.0</TargetPlatformVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <Description>WinBrew integration tests: real SQLite, real child processes for lock/concurrency, fault injection via the test-hooks build (A16).</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WinBrew.Application\WinBrew.Application.csproj" />
+    <ProjectReference Include="..\..\src\WinBrew.Infrastructure\WinBrew.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\WinBrew.Windows\WinBrew.Windows.csproj" />
+    <ProjectReference Include="..\WinBrew.TestFixtures\WinBrew.TestFixtures.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

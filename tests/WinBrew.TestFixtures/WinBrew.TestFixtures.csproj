@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>WinBrew test fixtures: fake ports, fixture builder, local HTTP server, test keys (A5). Phase A ships the fake port implementations; fixture repositories arrive with later phases.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WinBrew.Application\WinBrew.Application.csproj" />
+  </ItemGroup>
+
+</Project>

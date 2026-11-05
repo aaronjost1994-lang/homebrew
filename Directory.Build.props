@@ -1,0 +1,31 @@
+<Project>
+
+  <!-- WinBrew — shared build properties (A4).
+       Central package versions live in Directory.Packages.props. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Build net10.0-windows projects on non-Windows dev machines (A2:
+         Linux development host). No effect on Windows. Runtime behavior
+         against Windows APIs is exercised on Windows CI/runners (A16). -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+  </PropertyGroup>
+
+  <!-- Test-hooks builds pass -p:WinBrewTestHooks=true (A11/A13).
+       This one property gates ALL test-only behavior:
+         - the fault-injection seam (WINBREW_FAULT_AT)
+         - the localhost HTTP exception
+         - acceptance of testing.* configuration keys (D10)
+       Release builds contain none of these. -->
+  <PropertyGroup Condition="'$(WinBrewTestHooks)' == 'true'">
+    <DefineConstants>$(DefineConstants);WINBREW_TEST_HOOKS</DefineConstants>
+  </PropertyGroup>
+
+</Project>
