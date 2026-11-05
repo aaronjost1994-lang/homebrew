@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:winbrew:schema:config.v1",
+  "title": "WinBrew config.json v1",
+  "description": "User configuration (D10). Defaults are NOT written to the file; the file carries only explicit overrides. Must agree with ConfigDefinitions (schema conformance tests assert this). testing.* keys are honored only in test-hooks builds.",
+  "type": "object",
+  "required": ["schemaVersion", "values"],
+  "additionalProperties": false,
+  "properties": {
+    "schemaVersion": { "const": "1" },
+    "values": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "color": { "enum": ["auto", "always", "never"], "description": "--no-color and NO_COLOR override it (D10)." },
+        "interactive": { "enum": ["auto", "never"], "description": "'never' behaves like --non-interactive (D10)." },
+        "cache.maxBytes": { "type": "integer", "minimum": 0, "default": 5368709120 },
+        "download.timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 86400, "default": 300 },
+        "download.maxBytes": { "type": "integer", "minimum": 0, "default": 4294967296 },
+        "download.retries": { "type": "integer", "minimum": 0, "maximum": 5, "default": 3 },
+        "retainVersions": { "type": "integer", "minimum": 0, "maximum": 5, "default": 1 },
+        "lock.timeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 3600, "default": 30 },
+        "trust.maxClockSkewSeconds": { "type": "integer", "minimum": 0, "maximum": 86400, "default": 300 },
+        "trust.maxMetadataBytes": { "type": "integer", "minimum": 0, "default": 67108864 },
+        "archive.maxEntries": { "type": "integer", "minimum": 1, "default": 100000 },
+        "archive.maxTotalBytes": { "type": "integer", "minimum": 0, "default": 8589934592 },
+        "archive.maxCompressionRatio": { "type": "integer", "minimum": 1, "default": 200 },
+        "path.managed": { "type": "boolean", "default": false, "description": "Set to true only after the user consents (D10/A12)." },
+        "testing.allowInsecureLocalhost": {
+          "type": "boolean",
+          "default": false,
+          "description": "Honored only in test-hooks builds (-p:WinBrewTestHooks=true) with WINBREW_TEST_MODE=1; release builds reject it in config set (exit 2) and doctor reports it (D10/A13)."
+        }
+      }
+    }
+  }
+}

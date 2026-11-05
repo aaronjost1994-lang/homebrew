@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>WinBrew use cases, orchestration and port interfaces. References Core only (A5).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WinBrew.Core\WinBrew.Core.csproj" />
+  </ItemGroup>
+
+</Project>

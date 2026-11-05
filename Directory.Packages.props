@@ -1,0 +1,35 @@
+<Project>
+
+  <!-- WinBrew — central package management, exact pinned versions (A4).
+       Versions verified against nuget.org on 2026-11-05 (Phase A session).
+       Notes:
+       - System.CommandLine: latest stable 2.0 line (A4 anchors to the
+         stable 2.0 GA surface, never the 3.0 previews).
+       - Microsoft.Data.Sqlite 10.0.14 pulls SQLitePCLRaw 2.1.13
+         (bundle_e_sqlite3), which is patched for GHSA-2m69-gcr7-jv3q
+         (affected <= 2.1.11; the NU1903 finding in PROBES.md §4).
+       - Microsoft.Extensions.Hosting 10.0.14 matches the 10.0.14
+         servicing level required by PROBES.md §4 (CVE-2026-111497,
+         patched in 10.0.14). -->
+
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <CentralPackageTransitivePinningEnabled>true</CentralPackageTransitivePinningEnabled>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageVersion Include="System.CommandLine" Version="2.0.14" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting" Version="10.0.14" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageVersion Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.13" />
+    <PackageVersion Include="NuGet.Versioning" Version="7.9.0" />
+    <PackageVersion Include="Spectre.Console" Version="0.57.2" />
+    <PackageVersion Include="System.Formats.Asn1" Version="10.0.14" />
+
+    <!-- Tests -->
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+  </ItemGroup>
+
+</Project>

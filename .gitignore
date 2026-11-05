@@ -1,0 +1,21 @@
+# Build outputs
+bin/
+obj/
+artifacts/
+publish/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Test results
+TestResults/
+*.trx
+
+# OS
+Thumbs.db
+.DS_Store
+
+# NOTE: packages.lock.json files are COMMITTED (A4, per-RID locked restore).

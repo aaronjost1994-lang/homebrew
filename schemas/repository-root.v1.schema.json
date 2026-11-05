@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:winbrew:schema:repository-root.v1",
+  "title": "WinBrew repository root role payload v1",
+  "description": "Payload inside the signed envelope (D6). Signatures cover exact payload bytes. Keys are ECDSA P-256 (named curve), SPKI-encoded; key IDs are lowercase hex SHA-256 of the DER-encoded SubjectPublicKeyInfo. Signatures: 64-byte IEEE P1363 r||s, base64.",
+  "type": "object",
+  "required": ["version", "expires", "keys", "roles"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "expires": { "type": "string", "format": "date-time", "description": "Max expiry 365 days (D6)." },
+    "keys": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[0-9a-f]{64}$": {
+          "type": "object",
+          "required": ["keytype", "scheme", "public"],
+          "additionalProperties": false,
+          "properties": {
+            "keytype": { "const": "ecdsa" },
+            "scheme": { "const": "ecdsa-sha256-nistp256" },
+            "public": { "type": "string", "description": "Base64 DER SubjectPublicKeyInfo, uncompressed point P-256 (D6)." }
+          }
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "required": ["root", "timestamp", "index"],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^(root|timestamp|index)$": {
+          "type": "object",
+          "required": ["threshold", "keyids"],
+          "additionalProperties": false,
+          "properties": {
+            "threshold": { "type": "integer", "minimum": 1 },
+            "keyids": {
+              "type": "array",
+              "items": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+              "minItems": 1,
+              "uniqueItems": true,
+              "description": "Duplicate key IDs within one envelope are rejected; each distinct key counts at most once toward the threshold (D6)."
+            }
+          }
+        }
+      }
+    }
+  }
+}

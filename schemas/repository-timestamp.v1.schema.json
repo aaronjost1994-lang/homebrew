@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:winbrew:schema:repository-timestamp.v1",
+  "title": "WinBrew repository timestamp role payload v1",
+  "description": "Payload inside the signed envelope (D6). Signed by the timestamp key. Binds index.json by digest and length; max expiry 7 days.",
+  "type": "object",
+  "required": ["version", "expires", "meta"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "expires": { "type": "string", "format": "date-time" },
+    "meta": {
+      "type": "object",
+      "required": ["index.json"],
+      "additionalProperties": false,
+      "patternProperties": {
+        "^index\\.json$": {
+          "type": "object",
+          "required": ["sha256", "length"],
+          "additionalProperties": false,
+          "properties": {
+            "sha256": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+            "length": { "type": "integer", "minimum": 0, "description": "Enforced against trust.maxMetadataBytes while streaming (D6)." }
+          }
+        }
+      }
+    }
+  }
+}

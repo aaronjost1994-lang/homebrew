@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetPlatformIdentifier>Windows</TargetPlatformIdentifier>
+    <TargetPlatformVersion>10.0.22000.0</TargetPlatformVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wbrew-shim</AssemblyName>
+    <RootNamespace>WinBrew.Shim</RootNamespace>
+    <Description>WinBrew shim executable template (D4). The only Native AOT component; produces wbrew-shim.exe per RID.</Description>
+
+    <!-- Native AOT (D4/A4): the only AOT component in WinBrew.
+         AOT publishing must run on Windows (cross-OS native compilation
+         is not supported; PROBES.md §4). RIDs: win-x64, win-arm64. -->
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishAot>true</PublishAot>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="app.manifest" />
+    <ApplicationManifest Include="app.manifest" />
+  </ItemGroup>
+
+</Project>
