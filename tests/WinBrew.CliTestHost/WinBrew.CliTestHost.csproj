@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Test helper (A16): the wbrew CLI compiled from the SAME sources as
+       src/WinBrew.Cli, as a plain framework-dependent console app, so the
+       integration tests can run real child processes (fault injection with
+       Environment.FailFast, A11) on any host. src/WinBrew.Cli itself is a
+       self-contained single-file Windows exe and cannot be referenced from a
+       test project. Built with the test-hooks property whenever the test run
+       is (-p:WinBrewTestHooks=true). Not part of the shipped product. -->
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetPlatformIdentifier>Windows</TargetPlatformIdentifier>
+    <TargetPlatformVersion>10.0.22000.0</TargetPlatformVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>wbrew-testhost</AssemblyName>
+    <RootNamespace>WinBrew.Cli</RootNamespace>
+    <Version>0.1.0</Version>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\WinBrew.Cli\**\*.cs" Exclude="..\..\src\WinBrew.Cli\obj\**;..\..\src\WinBrew.Cli\bin\**" LinkBase="Cli" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WinBrew.Application\WinBrew.Application.csproj" />
+    <ProjectReference Include="..\..\src\WinBrew.Infrastructure\WinBrew.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\WinBrew.Windows\WinBrew.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.CommandLine" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Spectre.Console" />
+  </ItemGroup>
+
+</Project>

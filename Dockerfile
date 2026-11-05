@@ -1,6 +1,6 @@
 # WinBrew — Linux test container (dev/CI convenience, A2 Linux host).
 #
-#   docker build -t winbrew-test .                 # restore + build + all tests
+#   docker build -t winbrew-test .                 # restore + build + all tests (release, then test-hooks)
 #   docker build -t winbrew-test --target smoke .  # + CLI smoke (--version/config/doctor)
 #   docker run --rm winbrew-test                   # re-run the test suite
 #
@@ -23,15 +23,22 @@ COPY src/WinBrew.Cli/*.csproj src/WinBrew.Cli/packages.lock.json src/WinBrew.Cli
 COPY src/WinBrew.Shim/*.csproj src/WinBrew.Shim/packages.lock.json src/WinBrew.Shim/
 COPY tests/WinBrew.TestFixtures/*.csproj tests/WinBrew.TestFixtures/packages.lock.json tests/WinBrew.TestFixtures/
 COPY tests/WinBrew.LockHolderHelper/*.csproj tests/WinBrew.LockHolderHelper/packages.lock.json tests/WinBrew.LockHolderHelper/
+COPY tests/WinBrew.CliTestHost/*.csproj tests/WinBrew.CliTestHost/packages.lock.json tests/WinBrew.CliTestHost/
 COPY tests/WinBrew.UnitTests/*.csproj tests/WinBrew.UnitTests/packages.lock.json tests/WinBrew.UnitTests/
 COPY tests/WinBrew.IntegrationTests/*.csproj tests/WinBrew.IntegrationTests/packages.lock.json tests/WinBrew.IntegrationTests/
 COPY tests/WinBrew.EndToEndTests/*.csproj tests/WinBrew.EndToEndTests/packages.lock.json tests/WinBrew.EndToEndTests/
 RUN dotnet restore WinBrew.sln --locked-mode
 
 # 2) Build (warnings are errors) and test. A failing test fails `docker build`.
+#    Release build first (test-hooks-only tests report SKIPPED), then the
+#    test-hooks build (-p:WinBrewTestHooks=true) where fault injection, the
+#    localhost exception and unsigned ingest run the crash/lifecycle suites.
 COPY . .
 RUN dotnet build WinBrew.sln -c Release --no-restore
 RUN dotnet test WinBrew.sln -c Release --no-build \
+      --filter "FullyQualifiedName!~EndToEnd"
+RUN dotnet build WinBrew.sln -c Release --no-restore -p:WinBrewTestHooks=true \
+ && dotnet test WinBrew.sln -c Release --no-build \
       --filter "FullyQualifiedName!~EndToEnd"
 
 CMD ["dotnet", "test", "WinBrew.sln", "-c", "Release", "--no-build", \

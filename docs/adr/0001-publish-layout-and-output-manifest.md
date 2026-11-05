@@ -36,3 +36,11 @@ is the only Native AOT component (D4).
   The shim publishes from Windows CI/runner jobs.
 - Single-file bundle size (~104 MB self-contained) is reported per A17; no
   hard limit applies to `wbrew.exe` (only the shim has a < 3 MB target).
+
+## Extraction verification (Phase B, 2026-11-06)
+
+`ExtractionVerificationTests.PublishedBinary_CreatesNoExtractionDirectory`
+runs the published `wbrew.exe` (`--version`, `config list`, `doctor --json`)
+with a fresh, empty `%TEMP%` and asserts it stays empty. **Result: NOT RUN
+yet** — it needs Windows and the published binary (`WINBREW_PUBLISHED_EXE`);
+Windows CI (Phase F) records the observed result here.

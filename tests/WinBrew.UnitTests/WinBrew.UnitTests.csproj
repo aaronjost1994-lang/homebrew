@@ -24,6 +24,14 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- D4: the shim's pure rules (argv[0] scan, composition, length limit,
+         containment) and its sidecar reader are linked so the quoting corpus
+         runs on every host; the shim itself is a Native AOT Windows exe. -->
+    <Compile Include="..\..\src\WinBrew.Shim\ShimRules.cs" Link="Shim\ShimRules.cs" />
+    <Compile Include="..\..\src\WinBrew.Shim\SidecarReader.cs" Link="Shim\SidecarReader.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />
     <PackageReference Include="xunit.runner.visualstudio" />

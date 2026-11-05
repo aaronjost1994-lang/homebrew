@@ -29,6 +29,15 @@ public static class ManifestParser
             throw new WinBrewException(WinBrewErrorCode.VerificationFailure, "Manifest is empty (null document).");
         }
 
+        // Optional arrays: the source-generated deserializer initializes every
+        // init-only member, so an ABSENT "dependencies"/"executables" arrives
+        // as null despite the "= []" defaults. Absent means empty (A9).
+        manifest = manifest with
+        {
+            Dependencies = (IReadOnlyList<ManifestDependency>?)manifest.Dependencies ?? [],
+            Executables = (IReadOnlyList<ManifestExecutable>?)manifest.Executables ?? [],
+        };
+
         var errors = ManifestValidator.Validate(manifest, testHooksBuild);
         if (errors.Count > 0)
         {

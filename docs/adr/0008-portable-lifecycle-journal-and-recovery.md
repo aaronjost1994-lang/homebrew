@@ -65,5 +65,9 @@ consistent after recover**; plus 24 crash-during-compensation cases
 (`compensate.started`, `compensate.shim.reverted`,
 `compensate.package.removed`, `rollback.completed`): **all consistent**;
 self install crashed at `selfinstall.app.copied` (rolled back) and
-`state.committed` (rolled forward). The tests sub-session turns this into
-the committed integration suite.
+`state.committed` (rolled forward).
+
+**Committed (tests sub-session):** `CrashRecoveryTests` crashes the real CLI
+at every registered checkpoint (a coverage table is asserted to match the
+registry exactly) and checks the same invariant; 21/22 pass on Linux,
+`path.updated` runs on Windows against a disposable HKCU key.

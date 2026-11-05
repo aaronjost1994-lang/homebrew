@@ -408,7 +408,8 @@
       "winbrew.testfixtures": {
         "type": "Project",
         "dependencies": {
-          "WinBrew.Application": "[1.0.0, )"
+          "WinBrew.Application": "[1.0.0, )",
+          "xunit": "[2.9.3, )"
         }
       },
       "winbrew.windows": {

@@ -1,12 +1,19 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>WinBrew test fixtures: fake ports, fixture builder, local HTTP server, test keys (A5). Phase A ships the fake port implementations; fixture repositories arrive with later phases.</Description>
+    <Description>WinBrew test fixtures: fake ports, fixture builder, local HTTP server, test keys (A5). Fakes (Phase A); fixture repositories, PE/ZIP builders and the local HTTP server (Phase B).</Description>
     <IsPackable>false</IsPackable>
+    <!-- References xunit only for its attribute types; not a test project itself. -->
+    <IsTestProject>false</IsTestProject>
   </PropertyGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\WinBrew.Application\WinBrew.Application.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- WindowsFact / TestHooksFact attributes (skips are reported, never silent). -->
+    <PackageReference Include="xunit" />
   </ItemGroup>
 
 </Project>

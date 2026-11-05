@@ -42,6 +42,26 @@ internal static class ServiceConfigurator
         }
     }
 
+    /// <summary>
+    /// HKCU\Environment, or — in TEST-HOOKS builds with WINBREW_TEST_MODE=1
+    /// only — the disposable key named by WINBREW_TEST_PATH_KEY (A16: PATH
+    /// tests run against a test hive, never the real user PATH). Compiled out
+    /// of release builds like every other test-only behavior (A11).
+    /// </summary>
+    private static string UserPathKey(WinBrew.Application.Lifecycle.RuntimeFlags flags)
+    {
+#if WINBREW_TEST_HOOKS
+        var testKey = Environment.GetEnvironmentVariable("WINBREW_TEST_PATH_KEY");
+        if (flags.TestHooksBuild && flags.TestModeEnvironment && !string.IsNullOrWhiteSpace(testKey))
+        {
+            return testKey;
+        }
+#else
+        _ = flags;
+#endif
+        return RegistryUserPathEditor.EnvironmentKey;
+    }
+
     public static IServiceProvider BuildProvider()
     {
         var builder = Host.CreateEmptyApplicationBuilder(new HostApplicationBuilderSettings
@@ -110,7 +130,7 @@ internal static class ServiceConfigurator
         builder.Services.AddSingleton<IOperationJournal>(sp => sp.GetRequiredService<SqliteStateStore>());
         builder.Services.AddSingleton<IShimStore>(sp => new ShimStore(
             sp.GetRequiredService<StoragePaths>().Directories["bin"], sp.GetRequiredService<IPackageFileSystem>()));
-        builder.Services.AddSingleton<IUserPathEditor>(_ => new RegistryUserPathEditor());
+        builder.Services.AddSingleton<IUserPathEditor>(_ => new RegistryUserPathEditor(UserPathKey(flags)));
         builder.Services.AddSingleton<ISelfLocation, CliSelfLocation>();
         builder.Services.AddSingleton(_ => MetadataVerifierFactory.Create(flags.TestHooksBuild, flags.TestModeEnvironment));
 

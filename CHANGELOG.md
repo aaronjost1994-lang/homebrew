@@ -6,7 +6,7 @@ semantics; versions are `NuGetVersion`-normalized (D3).
 
 ## [Unreleased]
 
-### Added (Phase B — src sub-session, 2026-11-06; tests pending)
+### Added (Phase B — complete, 2026-11-06)
 - Portable lifecycle: `install` (single packages without dependencies;
   installing another version journals an upgrade), `uninstall`, `list`,
   `info`, `recover`, `self install` (zip layout).
@@ -19,6 +19,13 @@ semantics; versions are `NuGetVersion`-normalized (D3).
   containment (9009), job object, Ctrl+C handler routine, GUI targets.
 - PATH editor (HKCU), Restart Manager and Credential Manager adapters.
 - Final catalog ingest path; unsigned metadata only in test-hooks builds.
+- Tests: shim quoting corpus, A13 malicious-archive corpus, HTTP client
+  policy, crash-at-every-checkpoint recovery, lifecycle and self-install
+  suites (real CLI child processes via `tests/WinBrew.CliTestHost`).
+
+### Fixed
+- A manifest without the optional `dependencies`/`executables` arrays no
+  longer crashes validation (absent now means empty).
 
 ### Added (Phase A — complete, 2026-11-05)
 - Solution scaffolding per the architecture tree: `WinBrew.Core`,
