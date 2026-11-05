@@ -1,8 +1,15 @@
-# WinBrew — Phase 0 Implementation Plan (DRAFT)
+# WinBrew — Phase 0 Implementation Plan
 
-**Status: DRAFT — pending project-owner approval** (the acceptance gate
-of `phases/phase-0.md`). Nothing here changes a D-decision; objections
-are recorded, not applied.
+**Status: APPROVED** (project owner, 2026-11-05, in the session that
+cloned this repository to a new server and began implementation). Nothing
+here changes a D-decision; objections are recorded, not applied.
+
+> Implementation note (2026-11-05): the implementation repository was
+> created locally as `/opt/winbrew` (not yet pushed to GitHub) and the
+> Phase A **src sub-session** completed on a Linux host — see
+> `/opt/winbrew/docs/checkpoints/phase-a-src.md` and `/opt/winbrew/docs/adr/`
+> for the toolchain deviations this plan sanctions (SDK 10.0.403,
+> System.CommandLine 2.0.14, FTS5 available).
 
 **Session disclosure (honesty rules, A2).** This draft was produced
 inside a working session that also maintains the prompt file set —
