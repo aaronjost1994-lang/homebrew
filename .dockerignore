@@ -1,0 +1,13 @@
+**/bin/
+**/obj/
+**/TestResults/
+artifacts/
+publish/
+.vs/
+.vscode/
+*.user
+# Planning/owner files are not needed to build or test.
+context/
+probes/
+phases/
+mindmap.html
