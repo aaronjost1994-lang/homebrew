@@ -4,11 +4,12 @@
 cloned this repository to a new server and began implementation). Nothing
 here changes a D-decision; objections are recorded, not applied.
 
-> Implementation note (2026-11-05): the implementation repository was
-> created locally as `/opt/winbrew` (not yet pushed to GitHub) and the
-> Phase A **src sub-session** completed on a Linux host — see
-> `/opt/winbrew/docs/checkpoints/phase-a-src.md` and `/opt/winbrew/docs/adr/`
-> for the toolchain deviations this plan sanctions (SDK 10.0.403,
+> Implementation note (2026-11-05): the implementation was built in a
+> local working repository (`/opt/winbrew`) and merged into THIS
+> repository at the root (the A5 tree layout) on 2026-11-05, then pushed
+> to GitHub. The Phase A **src sub-session** completed on a Linux host —
+> see `docs/checkpoints/phase-a-src.md` and `docs/adr/` for the
+> toolchain deviations this plan sanctions (SDK 10.0.403,
 > System.CommandLine 2.0.14, FTS5 available).
 
 **Session disclosure (honesty rules, A2).** This draft was produced

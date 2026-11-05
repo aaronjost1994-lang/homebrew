@@ -1,12 +1,21 @@
-# WinBrew — Implementation Prompt File Set
+# WinBrew — planning prompts + implementation
 
-**Version:** 2.3.1 (2026-11-03) · **Status:** planning — no implementation yet
+**Version:** 2.3.1 (2026-11-03) · **Status:** Phase A in progress — src
+sub-session complete, tests sub-session pending
 
-This repository contains the phased implementation prompts for
-**WinBrew** (`wbrew`), an independent, Windows-native CLI package
-manager on .NET 10. It contains *only* the prompts — the
-implementation itself is built in phase sessions driven by these
-files.
+This private repository holds BOTH:
+
+1. **The phased implementation prompt set** for **WinBrew** (`wbrew`), an
+   independent, Windows-native CLI package manager on .NET 10 — the
+   `PROMPT.md` / `phases/` / `PLAN.md` / `RATIONALE.md` / `CHANGES.md` /
+   `PROBES.md` file set described below.
+2. **The implementation itself** (merged 2026-11-05, Phase A src
+   sub-session): `WinBrew.sln` + `src/` + `tests/` + `schemas/` at the
+   repo root, exactly per the A5 tree. Build with the pinned SDK
+   (`global.json`): `dotnet build -c Release` (warnings are errors),
+   `dotnet test`, per-RID restore `dotnet restore -r win-x64|win-arm64`.
+   Design decisions and evidence: `docs/adr/`, phase checkpoints:
+   `docs/checkpoints/`.
 
 Conceptual references (no code or format compatibility, no
 affiliation): Homebrew (UX and command vocabulary), Scoop (per-user
@@ -24,7 +33,8 @@ resolution), Cargo's sparse index (catalog model).
 | `RATIONALE.md` | Why each decision was made | Phase 0 and Phase F only |
 | `CHANGES.md` | Changelogs, review traceability | Never (owner only) |
 | `PROBES.md` | Phase 0 external-probe pre-work (dated answers + sources) | Never (owner only) |
-| `PLAN.md` | Phase 0 plan draft — schema v1, TFMs, checkpoints, phase estimates | Never (owner only) |
+| `PLAN.md` | Phase 0 plan — schema v1, TFMs, checkpoints, phase estimates (**APPROVED** 2026-11-05) | Never (owner only) |
+| `docs/checkpoints/` | Phase checkpoint reports (session handoffs) | Next phase session |
 
 ## Session rules
 
