@@ -11,7 +11,7 @@ namespace WinBrew.Cli;
 
 /// <summary>
 /// The System.CommandLine 2.0 stable command tree for every A8 command.
-/// Commands outside Phase A return a documented NotAvailableInThisBuild
+/// Commands outside Phases A–B return a documented NotAvailableInThisBuild
 /// error through the normal error path (exit 1) — phase-a.md.
 /// Handlers only parse input, call one use case and render (A5).
 /// </summary>
@@ -26,7 +26,8 @@ internal static class CommandTree
 
         BuildConfig(root, services);
         BuildDoctor(root, services);
-        BuildNotAvailableCommands(root);
+        var self = BuildNotAvailableCommands(root);
+        PackageCommands.Build(root, self, services);
 
         return root;
     }
@@ -193,24 +194,19 @@ internal static class CommandTree
             : "doctor: FAILURES present — see above (exit 1).");
     }
 
-    // ---- not-available commands (outside Phase A) --------------------------
+    // ---- not-available commands (outside Phases A–B) ------------------------
 
-    private static void BuildNotAvailableCommands(RootCommand root)
+    private static Command BuildNotAvailableCommands(RootCommand root)
     {
         // Each maps to the phase that delivers it, per the phase map (README/PLAN §7).
         root.Subcommands.Add(NotAvailable("search", "Search the catalog", "Phase D (catalog)"));
-        root.Subcommands.Add(NotAvailable("info", "Show package details", "Phase D (catalog)"));
-        root.Subcommands.Add(NotAvailable("install", "Install a package", "Phase B–C (portable lifecycle, resolver)"));
-        root.Subcommands.Add(NotAvailable("uninstall", "Uninstall a package", "Phase C (dependency edges)"));
         root.Subcommands.Add(NotAvailable("autoremove", "Remove dependency-only packages", "Phase C (orphans, D8)"));
-        root.Subcommands.Add(NotAvailable("list", "List installed packages", "Phase C (installed state display)"));
         root.Subcommands.Add(NotAvailable("outdated", "List packages with newer versions", "Phase C (installed state display)"));
         root.Subcommands.Add(NotAvailable("update", "Refresh repository metadata", "Phase D (trust)"));
         root.Subcommands.Add(NotAvailable("upgrade", "Upgrade installed packages", "Phase C (upgrade compensation)"));
         root.Subcommands.Add(NotAvailable("pin", "Pin a package", "Phase C (pins)"));
         root.Subcommands.Add(NotAvailable("unpin", "Unpin a package", "Phase C (pins)"));
         root.Subcommands.Add(NotAvailable("cleanup", "Reclaim cache space", "Phase C (cache budget)"));
-        root.Subcommands.Add(NotAvailable("recover", "Recover interrupted operations", "Phase B (journal/recovery)"));
 
         var repo = new Command("repo", "Manage configured repositories (D6).");
         repo.Subcommands.Add(NotAvailable("add", "Add a repository", "Phase D (trust bootstrap)"));
@@ -224,10 +220,10 @@ internal static class CommandTree
         root.Subcommands.Add(bundle);
 
         var self = new Command("self", "Manage the WinBrew installation itself (A14).");
-        self.Subcommands.Add(NotAvailable("install", "Bootstrap the WinBrew layout", "Phase B (bootstrap)"));
         self.Subcommands.Add(NotAvailable("update", "Self-update from the signed release feed", "Phase D (A14)"));
         self.Subcommands.Add(NotAvailable("uninstall", "Remove WinBrew", "Phase D (A14)"));
         root.Subcommands.Add(self);
+        return self;
     }
 
     /// <summary>

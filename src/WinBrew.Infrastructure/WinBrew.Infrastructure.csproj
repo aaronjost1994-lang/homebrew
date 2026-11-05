@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <Description>WinBrew cross-platform infrastructure: config storage, SQLite state database, mutation lock, fault injection. Implements Application interfaces (A5).</Description>
+    <Description>WinBrew cross-platform infrastructure: config storage, SQLite state database, mutation lock, fault injection, HTTP, cache, archive extraction, package files. Implements Application interfaces (A5).</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -11,6 +11,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
   </ItemGroup>
 
 </Project>

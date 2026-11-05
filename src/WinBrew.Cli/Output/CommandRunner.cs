@@ -8,6 +8,9 @@ namespace WinBrew.Cli.Output;
 /// (A8) or lets the command render text itself, and maps every exception
 /// through <see cref="ExitCodes"/> — never per handler (A4/D9).
 /// </summary>
+/// <summary>A command result with warnings for the envelope's "warnings" array (A8, A10 fallback warnings).</summary>
+internal sealed record CommandOutput(object? Data, IReadOnlyList<string> Warnings);
+
 internal static class CommandRunner
 {
     /// <summary>
@@ -24,10 +27,24 @@ internal static class CommandRunner
         try
         {
             var data = await work(ct).ConfigureAwait(false);
+            IReadOnlyList<string> warnings = [];
+            if (data is CommandOutput output)
+            {
+                data = output.Data;
+                warnings = output.Warnings;
+            }
 
             if (json)
             {
-                WriteEnvelope(JsonEnvelope.Success(commandName, data));
+                WriteEnvelope(JsonEnvelope.Success(commandName, data, warnings));
+            }
+            else
+            {
+                // Diagnostics go to stderr; stdout stays reserved for results (A8).
+                foreach (var warning in warnings)
+                {
+                    Console.Error.WriteLine($"warning: {warning}");
+                }
             }
 
             return ExitCodes.For(WinBrewErrorCode.Success);

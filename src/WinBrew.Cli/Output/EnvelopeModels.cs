@@ -1,5 +1,9 @@
 using System.Text.Json.Serialization;
+using WinBrew.Application.Catalog;
 using WinBrew.Application.Doctor;
+using WinBrew.Application.Lifecycle;
+using WinBrew.Application.Packages;
+using WinBrew.Application.SelfManagement;
 
 namespace WinBrew.Cli.Output;
 
@@ -61,6 +65,22 @@ public sealed record ConfigListData(IReadOnlyList<ConfigValueRow> Values);
 [JsonSerializable(typeof(ConfigListData))]
 [JsonSerializable(typeof(DoctorReport))]
 [JsonSerializable(typeof(DoctorCheck))]
+[JsonSerializable(typeof(InstallResult))]
+[JsonSerializable(typeof(InstallPlan))]
+[JsonSerializable(typeof(UninstallResult))]
+[JsonSerializable(typeof(UninstallPlan))]
+[JsonSerializable(typeof(ListResult))]
+[JsonSerializable(typeof(InstalledRow))]
+[JsonSerializable(typeof(InfoResult))]
+[JsonSerializable(typeof(InfoVersion))]
+[JsonSerializable(typeof(RecoverResult))]
+[JsonSerializable(typeof(RecoveredOperation))]
+[JsonSerializable(typeof(SelfInstallResult))]
+[JsonSerializable(typeof(IngestResult))]
+[JsonSerializable(typeof(List<string>))]
+[JsonSerializable(typeof(string[]))]
+[JsonSerializable(typeof(long))]
+[JsonSerializable(typeof(int))]
 internal sealed partial class CliJsonContext : JsonSerializerContext
 {
 }

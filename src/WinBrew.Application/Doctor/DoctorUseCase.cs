@@ -20,7 +20,8 @@ public sealed class DoctorUseCase(
     IStateDatabase stateDatabase,
     IMutationLock mutationLock,
     IEnvironmentProbe environmentProbe,
-    bool testHooksBuild)
+    bool testHooksBuild,
+    LifecycleDoctorChecks? lifecycle = null)
 {
     public async Task<DoctorReport> ExecuteAsync(CancellationToken ct)
     {
@@ -33,6 +34,11 @@ public sealed class DoctorUseCase(
         await CheckLockAsync(checks, ct);
         await CheckFts5Async(checks, ct);
         CheckTestOnlySettings(checks);
+
+        if (lifecycle is not null)
+        {
+            await lifecycle.AddChecksAsync(checks, ct);
+        }
 
         return new DoctorReport(versionInfo.Version, layout.Root, checks);
     }

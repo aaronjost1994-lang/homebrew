@@ -1,13 +1,22 @@
+using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using WinBrew.Application.Catalog;
 using WinBrew.Application.Configuration;
 using WinBrew.Application.Doctor;
+using WinBrew.Application.Lifecycle;
+using WinBrew.Application.Packages;
 using WinBrew.Application.Ports;
+using WinBrew.Application.SelfManagement;
 using WinBrew.Infrastructure;
+using WinBrew.Infrastructure.Archive;
 using WinBrew.Infrastructure.Config;
 using WinBrew.Infrastructure.FaultInjection;
+using WinBrew.Infrastructure.Files;
+using WinBrew.Infrastructure.Http;
 using WinBrew.Infrastructure.Locking;
 using WinBrew.Infrastructure.Sqlite;
+using WinBrew.Infrastructure.Trust;
 using WinBrew.Windows;
 
 namespace WinBrew.Cli;
@@ -67,10 +76,76 @@ internal static class ServiceConfigurator
         builder.Services.AddSingleton<IConsentPrompt, ConsoleConsentPrompt>();
         builder.Services.AddSingleton<IVersionInfo, CliVersionInfo>();
 
+        // ---- Phase B: portable lifecycle ports ----------------------------------------
+        var flags = new RuntimeFlags(testHooks, Environment.GetEnvironmentVariable("WINBREW_TEST_MODE") == "1");
+        builder.Services.AddSingleton(flags);
+        builder.Services.AddSingleton(TimeProvider.System);
+
+        // A13/A4: HttpClient via IHttpClientFactory; redirects are followed
+        // manually, no cookies, no automatic decompression (sizes are checked
+        // on the bytes received), and the factory's logging handlers are
+        // removed so no URL (with its query string) is ever logged unredacted.
+        builder.Services.AddHttpClient(SecureHttpFetcher.ClientName, client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseCookies = false,
+                AutomaticDecompression = DecompressionMethods.None,
+                ConnectTimeout = TimeSpan.FromSeconds(30),
+            })
+            .RemoveAllLoggers();
+
+        builder.Services.AddSingleton<ICredentialProvider, CredentialManagerProvider>();
+        builder.Services.AddSingleton<IFileLockInspector, RestartManagerInspector>();
+        builder.Services.AddSingleton<IHttpFetcher, SecureHttpFetcher>();
+        builder.Services.AddSingleton<IPackageFileSystem, PackageFileSystem>();
+        builder.Services.AddSingleton<IArchiveExtractor, SafeZipExtractor>();
+        builder.Services.AddSingleton<IArtifactCache>(sp => new ArtifactCache(
+            sp.GetRequiredService<StoragePaths>().Directories["cache.artifacts"],
+            sp.GetRequiredService<IPackageFileSystem>()));
+        builder.Services.AddSingleton(sp => new SqliteStateStore(
+            sp.GetRequiredService<StoragePaths>().DatabasePath, sp.GetRequiredService<TimeProvider>()));
+        builder.Services.AddSingleton<ICatalogStore>(sp => sp.GetRequiredService<SqliteStateStore>());
+        builder.Services.AddSingleton<IInstalledStore>(sp => sp.GetRequiredService<SqliteStateStore>());
+        builder.Services.AddSingleton<IOperationJournal>(sp => sp.GetRequiredService<SqliteStateStore>());
+        builder.Services.AddSingleton<IShimStore>(sp => new ShimStore(
+            sp.GetRequiredService<StoragePaths>().Directories["bin"], sp.GetRequiredService<IPackageFileSystem>()));
+        builder.Services.AddSingleton<IUserPathEditor>(_ => new RegistryUserPathEditor());
+        builder.Services.AddSingleton<ISelfLocation, CliSelfLocation>();
+        builder.Services.AddSingleton(_ => MetadataVerifierFactory.Create(flags.TestHooksBuild, flags.TestModeEnvironment));
+
+        builder.Services.AddSingleton(sp => new LifecycleServices(
+            sp.GetRequiredService<IStorageLayout>(),
+            sp.GetRequiredService<IOperationJournal>(),
+            sp.GetRequiredService<IFaultInjector>(),
+            sp.GetRequiredService<IPackageFileSystem>(),
+            sp.GetRequiredService<IShimStore>(),
+            sp.GetRequiredService<IInstalledStore>(),
+            sp.GetRequiredService<ICatalogStore>(),
+            sp.GetRequiredService<IArtifactCache>(),
+            sp.GetRequiredService<IArchiveExtractor>(),
+            sp.GetRequiredService<IHttpFetcher>(),
+            sp.GetRequiredService<IUserPathEditor>(),
+            sp.GetRequiredService<IConfigStore>(),
+            sp.GetRequiredService<ISelfLocation>(),
+            sp.GetRequiredService<IEnvironmentProbe>(),
+            flags,
+            sp.GetRequiredService<TimeProvider>()));
+        builder.Services.AddSingleton<RecoveryService>();
+        builder.Services.AddSingleton<MutationSession>();
+
         // Use cases (one per command handler, A5).
         builder.Services.AddSingleton<GetConfigValueUseCase>();
         builder.Services.AddSingleton<SetConfigValueUseCase>();
         builder.Services.AddSingleton<ListConfigUseCase>();
+        builder.Services.AddSingleton<InstallUseCase>();
+        builder.Services.AddSingleton<UninstallUseCase>();
+        builder.Services.AddSingleton<ListUseCase>();
+        builder.Services.AddSingleton<InfoUseCase>();
+        builder.Services.AddSingleton<RecoverUseCase>();
+        builder.Services.AddSingleton<SelfInstallUseCase>();
+        builder.Services.AddSingleton<IngestIndexUseCase>();
+        builder.Services.AddSingleton<LifecycleDoctorChecks>();
         builder.Services.AddSingleton<DoctorUseCase>(sp => new DoctorUseCase(
             sp.GetRequiredService<IVersionInfo>(),
             sp.GetRequiredService<IStorageLayout>(),
@@ -78,7 +153,8 @@ internal static class ServiceConfigurator
             sp.GetRequiredService<IStateDatabase>(),
             sp.GetRequiredService<IMutationLock>(),
             sp.GetRequiredService<IEnvironmentProbe>(),
-            testHooks));
+            testHooks,
+            sp.GetRequiredService<LifecycleDoctorChecks>()));
 
         return builder.Build().Services;
     }

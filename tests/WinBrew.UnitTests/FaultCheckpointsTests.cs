@@ -9,8 +9,11 @@ public class FaultCheckpointsTests
     public void Registry_IsAuthoritative_UnknownNamesThrow() // A11: tests enumerate, nothing hardcodes
     {
         var ex = Assert.Throws<InvalidOperationException>(
-            () => FaultCheckpoints.EnsureRegistered("download.started"));
+            () => FaultCheckpoints.EnsureRegistered("no.such.checkpoint"));
         Assert.Contains("not registered", ex.Message);
+
+        // Phase B registers the lifecycle checkpoints (PLAN §6).
+        FaultCheckpoints.EnsureRegistered(FaultCheckpoints.DownloadStarted);
     }
 
     [Fact]
