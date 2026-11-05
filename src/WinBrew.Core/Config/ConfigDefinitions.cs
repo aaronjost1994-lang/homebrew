@@ -165,8 +165,8 @@ public static class ConfigDefinitions
             return def.Type switch
             {
                 ConfigValueType.Bool => ParseBool(key, rawValue),
-                ConfigValueType.Integer => ParseNumber(long.Parse(rawValue, System.Globalization.CultureInfo.InvariantCulture), def),
-                ConfigValueType.Long => ParseNumber(long.Parse(rawValue, System.Globalization.CultureInfo.InvariantCulture), def),
+                ConfigValueType.Integer => (int)CheckRange(def, int.Parse(rawValue, System.Globalization.CultureInfo.InvariantCulture)),
+                ConfigValueType.Long => CheckRange(def, long.Parse(rawValue, System.Globalization.CultureInfo.InvariantCulture)),
                 ConfigValueType.Enum => ParseEnum(def, rawValue),
                 ConfigValueType.Text => rawValue,
                 _ => throw new InvalidOperationException($"Unhandled {def.Type}"),
@@ -208,8 +208,8 @@ public static class ConfigDefinitions
         return (def.Type, value) switch
         {
             (ConfigValueType.Bool, bool b) => b,
-            (ConfigValueType.Integer, int i) => CheckRange(def, i),
-            (ConfigValueType.Integer, long l) => CheckRange(def, l),
+            (ConfigValueType.Integer, int i) => (int)CheckRange(def, i),
+            (ConfigValueType.Integer, long l) => (int)CheckRange(def, l),
             (ConfigValueType.Long, int i) => CheckRange(def, i),
             (ConfigValueType.Long, long l) => CheckRange(def, l),
             (ConfigValueType.Enum, string s) => ParseEnum(def, s),

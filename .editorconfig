@@ -28,3 +28,8 @@ dotnet_diagnostic.CA2007.severity = none
 # LoggerMessage source-gen delegates (CA1848) are deferred: WinBrew v1
 # logs through the simple extensions; a perf pass may adopt them later.
 dotnet_diagnostic.CA1848.severity = none
+
+# Tests use snake_case test names (xunit convention) — CA1707 is a
+# production-code rule; tests keep underscores on purpose.
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none

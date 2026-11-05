@@ -167,19 +167,30 @@ public sealed class JsonConfigStore : IConfigStore
         return values;
     }
 
-    private object ValidateElement(string key, JsonElement element) => element.ValueKind switch
+    private object ValidateElement(string key, JsonElement element)
     {
-        JsonValueKind.True => ConfigDefinitions.ValidateTyped(key, true, _testHooksBuild),
-        JsonValueKind.False => ConfigDefinitions.ValidateTyped(key, false, _testHooksBuild),
-        JsonValueKind.Number when element.TryGetInt32(out var i) =>
-            ConfigDefinitions.ValidateTyped(key, i, _testHooksBuild),
-        JsonValueKind.Number when element.TryGetInt64(out var l) =>
-            ConfigDefinitions.ValidateTyped(key, l, _testHooksBuild),
-        JsonValueKind.String => ConfigDefinitions.ValidateTyped(key, element.GetString(), _testHooksBuild),
-        _ => throw new WinBrewException(
-            WinBrewErrorCode.UsageError,
-            $"Configuration key '{key}' has an unsupported JSON type ({element.ValueKind})."),
-    };
+        // Coerce JSON numbers to the declared D10 width first so callers see
+        // consistent types regardless of how the file spelled the number.
+        if (!ConfigDefinitions.Keys.TryGetValue(key, out var def))
+        {
+            throw new WinBrewException(WinBrewErrorCode.UsageError, $"Unknown configuration key '{key}'.");
+        }
+
+        object raw = element.ValueKind switch
+        {
+            JsonValueKind.True => true,
+            JsonValueKind.False => false,
+            JsonValueKind.Number when def.Type == ConfigValueType.Long => element.GetInt64(),
+            JsonValueKind.Number => element.GetInt32(),
+            JsonValueKind.String => element.GetString() ?? throw new WinBrewException(
+                WinBrewErrorCode.UsageError, $"Configuration key '{key}' must not be null."),
+            _ => throw new WinBrewException(
+                WinBrewErrorCode.UsageError,
+                $"Configuration key '{key}' has an unsupported JSON type ({element.ValueKind})."),
+        };
+
+        return ConfigDefinitions.ValidateTyped(key, raw, _testHooksBuild);
+    }
 
     private static JsonElement ToJsonElement(string key, object? value) => value switch
     {

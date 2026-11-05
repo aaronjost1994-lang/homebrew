@@ -1,7 +1,9 @@
 # WinBrew — planning prompts + implementation
 
-**Version:** 2.3.1 (2026-11-03) · **Status:** Phase A in progress — src
-sub-session complete, tests sub-session pending
+**Version:** 2.3.1 (2026-11-03) · **Status:** Phase A **complete**
+(src + tests sub-sessions; 181/181 tests green on the Linux dev host —
+Windows-only deliverables recorded as CI items in
+`docs/checkpoints/phase-a-tests.md`). Phase B is next.
 
 This private repository holds BOTH:
 

@@ -54,43 +54,30 @@ public sealed record Manifest
     public JsonElement? Installer { get; init; }
 }
 
-/// <summary>One per architecture (A9).</summary>
-public sealed record ManifestArtifact
-{
-    /// <summary>x64 | arm64 | x86 (A9/A10).</summary>
-    public required string Architecture { get; init; }
+/// <summary>
+/// One per architecture (A9): architecture (x64 | arm64 | x86), url (HTTPS),
+/// sha256 (64 lowercase hex), size (bytes; client-side download.maxBytes
+/// applies on top, A11 step 3), format (zip | msi | exe), installType
+/// (portable | msi | exe).
+/// </summary>
+public sealed record ManifestArtifact(
+    string Architecture,
+    string Url,
+    string Sha256,
+    long Size,
+    string Format,
+    string InstallType);
 
-    public required string Url { get; init; }
+/// <summary>
+/// Dependency reference as written in the manifest (A9/D6, kept verbatim):
+/// id = "&lt;id&gt;" (declaring repo) or "&lt;repo&gt;/&lt;id&gt;" (cross-repo); range =
+/// NuGet interval notation only (D3).
+/// </summary>
+public sealed record ManifestDependency(string Id, string Range);
 
-    /// <summary>64 lowercase hex characters (A9).</summary>
-    public required string Sha256 { get; init; }
-
-    /// <summary>Size in bytes (A9). Client-side download.maxBytes applies on top (A11 step 3).</summary>
-    public required long Size { get; init; }
-
-    /// <summary>zip | msi | exe (A9).</summary>
-    public required string Format { get; init; }
-
-    /// <summary>portable | msi | exe (A9).</summary>
-    public required string InstallType { get; init; }
-}
-
-/// <summary>Dependency reference as written in the manifest (A9/D6, kept verbatim).</summary>
-public sealed record ManifestDependency
-{
-    /// <summary>"&lt;id&gt;" (declaring repo) or "&lt;repo&gt;/&lt;id&gt;" (cross-repo, A9).</summary>
-    public required string Id { get; init; }
-
-    /// <summary>NuGet interval notation only (D3).</summary>
-    public required string Range { get; init; }
-}
-
-/// <summary>Shim declaration, portable packages only (A9).</summary>
-public sealed record ManifestExecutable
-{
-    /// <summary>Shim name; WinBrew places bin\&lt;name&gt;.exe (A9/D4).</summary>
-    public required string Name { get; init; }
-
-    /// <summary>Relative path inside the package, '/' separators, must end .exe (A9).</summary>
-    public required string Target { get; init; }
-}
+/// <summary>
+/// Shim declaration, portable packages only (A9): name = shim name
+/// (binary becomes bin\&lt;name&gt;.exe, A9/D4); target = relative path inside
+/// the package, '/' separators, must end .exe.
+/// </summary>
+public sealed record ManifestExecutable(string Name, string Target);

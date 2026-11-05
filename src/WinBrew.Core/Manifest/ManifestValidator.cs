@@ -397,8 +397,27 @@ public static partial class ManifestValidator
             return false;
         }
 
-        var tokens = Regex.Matches(expression, @"[A-Za-z0-9][A-Za-z0-9.\-+]*|\(|\)");
-        if (tokens.Count == 0 || string.Concat(tokens.Select(t => t.Value)) != expression.Replace(" ", string.Empty, StringComparison.Ordinal))
+        // Tokenize with whitespace BETWEEN tokens allowed; the tokens must
+        // cover the entire string (only whitespace may remain unmatched).
+        var tokenMatches = Regex.Matches(expression, @"\s+|(?<id>[A-Za-z0-9][A-Za-z0-9.\-+]*)|\(|\)");
+        var tokens = new List<(string Value, int Index)>();
+        var covered = 0;
+        foreach (Match match in tokenMatches)
+        {
+            if (match.Index != covered)
+            {
+                problem = $"'{expression}' is not a valid SPDX expression (unexpected characters at {covered}).";
+                return false;
+            }
+
+            covered += match.Length;
+            if (match.Value.Trim().Length > 0)
+            {
+                tokens.Add((match.Value, match.Index));
+            }
+        }
+
+        if (covered != expression.Length || tokens.Count == 0)
         {
             problem = $"'{expression}' is not a valid SPDX expression (unexpected characters).";
             return false;
@@ -406,6 +425,7 @@ public static partial class ManifestValidator
 
         var depth = 0;
         var expectOperand = true;
+        var afterWith = false; // the token after WITH is the exception id — not a new operand
         for (var i = 0; i < tokens.Count; i++)
         {
             var token = tokens[i].Value;
@@ -437,6 +457,7 @@ public static partial class ManifestValidator
                     }
 
                     expectOperand = true;
+                    afterWith = false;
                     break;
                 case "WITH":
                     if (expectOperand || i == tokens.Count - 1)
@@ -445,8 +466,15 @@ public static partial class ManifestValidator
                         return false;
                     }
 
+                    afterWith = true;
                     break;
                 default:
+                    if (afterWith)
+                    {
+                        afterWith = false; // exception id consumed; still not expecting a new operand
+                        break;
+                    }
+
                     if (!expectOperand)
                     {
                         problem = $"Missing operator before '{token}' in '{expression}'.";

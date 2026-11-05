@@ -52,8 +52,10 @@ public static class PathList
 
         if (alreadyPresent)
         {
-            var same = string.Join(";", entries);
-            return new AppendResult(same, AlreadyPresent: true, ExceedsLimit: false, ShouldWarn: same.Length > WarnLimit);
+            // Never rewrite the value when the entry already exists: the
+            // user's original formatting is preserved exactly (A12).
+            var original = rawValue!;
+            return new AppendResult(original, AlreadyPresent: true, ExceedsLimit: false, ShouldWarn: original.Length > WarnLimit);
         }
 
         var appended = entries.Append(binPath.Trim());

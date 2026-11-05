@@ -111,7 +111,7 @@ public sealed class DoctorUseCase(
     {
         var inspection = await configStore.InspectAsync(ct);
 
-        if (inspection.Document is null)
+        if (inspection.Document is null && inspection.Problems.Count == 0)
         {
             checks.Add(new("config.file", DoctorStatus.Ok,
                 "config.json not found; all defaults apply (D10)."));

@@ -6,7 +6,9 @@ namespace WinBrew.Cli.Output;
 /// <summary>
 /// The JSON output envelope (A8): exactly one JSON document on stdout with
 /// --json, following schemas/cli-output.v1.schema.json. Versioned
-/// separately from the manifest schema.
+/// separately from the manifest schema. With the context's WhenWritingNull,
+/// a null Data is omitted from the wire — schema-valid on success (data is
+/// not required) and REQUIRED to be absent on failure (schema allOf).
 /// </summary>
 public sealed record JsonEnvelope(
     string SchemaVersion,

@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <Description>Test helper: holds a WinBrew mutation lock for a fixed time so integration tests can exercise real cross-process lock behavior (A16). Not part of the shipped product.</Description>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WinBrew.Infrastructure\WinBrew.Infrastructure.csproj" />
+  </ItemGroup>
+
+</Project>

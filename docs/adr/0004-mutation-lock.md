@@ -35,6 +35,23 @@
 - The lock file persists after a clean release (metadata remains, handle
   closed). That is by design: the next holder truncates; doctor reports
   leftover metadata as "stale" (Ok) using the PID+start-time rule.
-- Integration tests (tests sub-session) must cover: blocked process reports
-  the holding PID; torn/partial metadata = "holder unknown"; reused PID with
-  mismatched start time is not reported as holder (A16).
+- Integration tests (A16) cover, with a real child process
+  (`WinBrew.LockHolderHelper`): blocked process reports the holding PID and
+  command on timeout; torn/partial metadata = "holder unknown"; reused PID
+  with a mismatched start time is not reported as the holder. All pass on
+  the Linux dev host as well as (expected) Windows.
+
+### Non-Windows guard file (dev/test only)
+
+- Probed (2026-11-05): .NET's Unix `FileShare` emulation treats only
+  `FileShare.None` as exclusive — the D5 writer triple does NOT exclude a
+  second writer on Linux/macOS. Writers therefore additionally take an
+  exclusive non-blocking `flock` on a separate **guard file**
+  (`state\winbrew.lock.guard`), which per-open-file-description semantics
+  serialize writers within AND across processes. Diagnostic readers never
+  open the guard, so they are never blocked (their own opens take shared
+  internal locks that would collide with a holder-side flock on the main
+  file — the first design tried; do not repeat it). Windows keeps pure D5
+  behavior: no guard file is ever created there.
+- A stale guard file left on disk is harmless: its flock is released by the
+  OS when the holder's handle closes.

@@ -1,6 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <!-- Windows TFM required to exercise WinBrew.Cli (exit-code mapping and
+         the JSON envelope contract, A16) — a recorded deviation from PLAN §4's
+         plain net10.0 (those tests need the Cli assembly). Still runs on the
+         Linux dev host for everything portable. -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetPlatformIdentifier>Windows</TargetPlatformIdentifier>
+    <TargetPlatformVersion>10.0.22000.0</TargetPlatformVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
     <Description>WinBrew unit tests: domain, use cases and infrastructure with fakes (A16).</Description>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
@@ -9,6 +17,10 @@
     <ProjectReference Include="..\..\src\WinBrew.Core\WinBrew.Core.csproj" />
     <ProjectReference Include="..\..\src\WinBrew.Application\WinBrew.Application.csproj" />
     <ProjectReference Include="..\..\src\WinBrew.Infrastructure\WinBrew.Infrastructure.csproj" />
+    <!-- Unit tests exercise the exit-code mapping (D9, A16) and the JSON
+         envelope contract (A16) which live in the Cli project. -->
+    <ProjectReference Include="..\..\src\WinBrew.Cli\WinBrew.Cli.csproj" />
+    <ProjectReference Include="..\WinBrew.TestFixtures\WinBrew.TestFixtures.csproj" />
   </ItemGroup>
 
   <ItemGroup>

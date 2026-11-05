@@ -6,7 +6,7 @@ semantics; versions are `NuGetVersion`-normalized (D3).
 
 ## [Unreleased]
 
-### Added (Phase A — in progress)
+### Added (Phase A — complete, 2026-11-05)
 - Solution scaffolding per the architecture tree: `WinBrew.Core`,
   `WinBrew.Application`, `WinBrew.Infrastructure`, `WinBrew.Windows`,
   `WinBrew.Cli`, `WinBrew.Shim` (Native AOT project; Phase B implements

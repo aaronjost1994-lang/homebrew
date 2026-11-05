@@ -14,6 +14,8 @@
     <ProjectReference Include="..\..\src\WinBrew.Infrastructure\WinBrew.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\WinBrew.Windows\WinBrew.Windows.csproj" />
     <ProjectReference Include="..\WinBrew.TestFixtures\WinBrew.TestFixtures.csproj" />
+    <!-- A16: real cross-process lock tests spawn this helper. -->
+    <ProjectReference Include="..\WinBrew.LockHolderHelper\WinBrew.LockHolderHelper.csproj" />
   </ItemGroup>
 
   <ItemGroup>

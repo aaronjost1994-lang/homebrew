@@ -22,4 +22,22 @@ per-RID lock files restored for `win-x64` and `win-arm64` (A4) and committed.
 
 - Windows CI must use an SDK ≥ 10.0.403 (PROBES.md §4 note).
 - When `RuntimeIdentifiers` changes, lock files are regenerated (A4).
-- `dotnet restore --locked-mode -r <rid>` is the CI restore contract.
+
+### Locked-mode restore contract (Phase A, verified 2026-11-05)
+
+- The stable CI restore command is **`dotnet restore --locked-mode`** at
+  solution level. It validates the whole graph INCLUDING both published-RID
+  sections (`win-x64`, `win-arm64`) carried in `WinBrew.Cli`/`WinBrew.Shim`
+  locks (those projects declare `RuntimeIdentifiers`, so one plain restore
+  captures both RID graphs — verified in the committed lock files).
+- **Per-RID `-r` locked restores of the full graph are NOT expressible**
+  (NuGet NU1004): RID-less projects (all `net10.0` libraries and test
+  projects) get RID-tagged project sets under `-r` that can never match
+  their deliberately RID-less locks, and the host RID leaks into the set
+  (observed: `linux-x64;win-x64` vs lock `linux-x64;win-arm64;win-x64`).
+- **Lock files are host-shaped**: a lock generated on Linux carries a
+  `linux-x64` section; on a Windows host it would not. CI on windows-latest
+  must therefore either run on hosts whose RID set matches the committed
+  locks, or regenerate the locks and fail on drift (git diff check) — the
+  exact recipe is a Phase F ci.yml decision, recorded here so it is not
+  rediscovered.

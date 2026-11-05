@@ -37,6 +37,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Unit tests exercise the exit-code mapping and JSON envelope (A16),
+         which use internal source-gen types. -->
+    <InternalsVisibleTo Include="WinBrew.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="app.manifest" />
     <ApplicationManifest Include="app.manifest" />
   </ItemGroup>
