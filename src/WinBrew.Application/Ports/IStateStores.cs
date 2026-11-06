@@ -81,11 +81,16 @@ public sealed record ShimRecord(
     string Subsystem,
     string TemplateSha256);
 
-/// <summary>The installed-state half of a StateCommitted transaction.</summary>
+/// <summary>The installed-state half of a StateCommitted transaction for one package.</summary>
+/// <param name="Dependencies">The package's resolved dependencies as qualified ids: they REPLACE its dependency edges (A10).</param>
 public sealed record InstallCommit(
     InstalledPackage Package,
     IReadOnlyList<ShimRecord> Shims,
-    IReadOnlyList<string> RemovedShimNames);
+    IReadOnlyList<string> RemovedShimNames,
+    IReadOnlyList<string> Dependencies);
+
+/// <summary>One stored dependency edge (A10: every edge is recorded).</summary>
+public sealed record DependencyEdge(string Dependent, string Dependency);
 
 public interface IInstalledStore
 {
@@ -101,11 +106,20 @@ public interface IInstalledStore
     Task<IReadOnlyList<string>> GetDependentsAsync(string repo, string id, CancellationToken ct);
 
     /// <summary>
-    /// ONE SQLite transaction: installed row + shim rows (+ removals) + the
-    /// operation's state = StateCommitted (A11: files and SQLite are separate
-    /// resources; this covers only the SQLite side).
+    /// ONE SQLite transaction for a whole plan: installed rows, shim rows (+
+    /// removals), dependency edges, and the operation's state = StateCommitted
+    /// (A11: files and SQLite are separate resources; this covers only the
+    /// SQLite side).
     /// </summary>
-    Task CommitInstallAsync(string opId, InstallCommit commit, CancellationToken ct);
+    Task CommitPlanAsync(string opId, IReadOnlyList<InstallCommit> commits, CancellationToken ct);
+
+    Task<IReadOnlyList<DependencyEdge>> ListDependencyEdgesAsync(CancellationToken ct);
+
+    /// <summary>Pinned packages: qualified id → the installed version they are fixed at (D2 rule 1).</summary>
+    Task<IReadOnlyDictionary<string, string>> GetPinsAsync(CancellationToken ct);
+
+    /// <summary>Pins or unpins an installed package. Returns false when nothing changed.</summary>
+    Task<bool> SetPinnedAsync(string repo, string id, bool pinned, CancellationToken ct);
 
     /// <summary>ONE transaction: delete the installed row (cascading shims/edges/pins) + state = StateCommitted.</summary>
     Task CommitUninstallAsync(string opId, string repo, string id, CancellationToken ct);

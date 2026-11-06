@@ -6,6 +6,18 @@ semantics; versions are `NuGetVersion`-normalized (D3).
 
 ## [Unreleased]
 
+### Added (Phase C — complete, 2026-11-06)
+- PubGrub dependency resolver (pure, deterministic, explanations naming
+  repository-qualified ids and original ranges; cycles refused with their
+  path; architecture fallback and re-selection, A10).
+- Multi-package plans as ONE journaled operation: all-or-nothing up to
+  StateCommitted; dependency edges and explicit/dependency tracking.
+- `upgrade`, `outdated`, `pin`, `unpin`, `autoremove`, `cleanup` (never
+  removes active, pinned, referenced or retained artifacts).
+
+### Changed
+- `install`/`upgrade` JSON: `data.plan.items[]` (one item per package).
+
 ### Added (Phase B — complete, 2026-11-06)
 - Portable lifecycle: `install` (single packages without dependencies;
   installing another version journals an upgrade), `uninstall`, `list`,

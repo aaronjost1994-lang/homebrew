@@ -32,7 +32,13 @@ public interface IArtifactCache
 
     /// <summary>Moves an already-verified file into the cache (same volume, A6). Idempotent.</summary>
     Task<string> AddVerifiedAsync(string verifiedFile, string sha256, CancellationToken ct);
+
+    /// <summary>Every cache entry with its size and last write time (oldest first).</summary>
+    IReadOnlyList<CacheEntry> List();
 }
+
+/// <summary>One content-addressed cache file.</summary>
+public sealed record CacheEntry(string Sha256, long Size, DateTimeOffset LastWrite);
 
 /// <summary>
 /// File-system operations with the A12 files-in-use rules: sharing

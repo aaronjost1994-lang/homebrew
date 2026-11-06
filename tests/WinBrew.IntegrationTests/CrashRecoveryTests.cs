@@ -36,23 +36,26 @@ public sealed class CrashRecoveryTests
 
         /// <summary>Recovery is sabotaged so it must end in RecoveryFailed.</summary>
         SabotagedRecovery,
+
+        /// <summary>Phase C: app 1.0.0 + lib 1.5.0 → app 2.0.0 + lib 2.0.0 in ONE operation (new template too).</summary>
+        MultiPackageUpgrade,
     }
 
     /// <summary>Every registered checkpoint → the scenarios that must fire it. Asserted to cover the registry exactly.</summary>
     public static readonly IReadOnlyDictionary<string, Scenario[]> Coverage = new Dictionary<string, Scenario[]>(StringComparer.Ordinal)
     {
-        [FaultCheckpoints.DownloadStarted] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.DownloadCompleted] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.ArtifactVerified] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.ArtifactCached] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.ExtractCompleted] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.ValidateCompleted] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.PackagePlaced] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.ShimSidecarReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall],
-        [FaultCheckpoints.ShimBinaryReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall],
-        [FaultCheckpoints.PackageActivated] = [Scenario.Install, Scenario.Upgrade],
-        [FaultCheckpoints.StateCommitted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall],
-        [FaultCheckpoints.OperationCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall],
+        [FaultCheckpoints.DownloadStarted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.DownloadCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ArtifactVerified] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ArtifactCached] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ExtractCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ValidateCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.PackagePlaced] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ShimSidecarReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ShimBinaryReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.PackageActivated] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.StateCommitted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.OperationCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
         [FaultCheckpoints.CompensateStarted] = [Scenario.CrashDuringRecovery],
         [FaultCheckpoints.CompensateShimReverted] = [Scenario.CrashDuringRecovery],
         [FaultCheckpoints.CompensatePackageRemoved] = [Scenario.CrashDuringRecovery],
@@ -148,6 +151,10 @@ public sealed class CrashRecoveryTests
                 Assert.Contains("RecoveryFailed", doctor.StdOut, StringComparison.Ordinal);
                 break;
 
+            case Scenario.MultiPackageUpgrade:
+                AssertMultiUpgradeRecovers(checkpoint);
+                break;
+
             default:
                 throw new InvalidOperationException(scenario.ToString());
         }
@@ -169,6 +176,35 @@ public sealed class CrashRecoveryTests
         CliHarness.Expect(0, h.RunWith(new Dictionary<string, string?> { ["WINBREW_TEST_PATH_KEY"] = hive.SubKey }, "recover"));
         Assert.Contains(h.Bin, hive.ReadPath() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
         SelfInstallTests.AssertSelfInstallConsistent(h);
+    }
+
+    /// <summary>
+    /// Phase C acceptance: a failed upgrade at every checkpoint leaves the
+    /// PREVIOUS versions usable — the whole plan is all-or-nothing: either both
+    /// packages are on their old versions with their old shims, or both moved.
+    /// </summary>
+    private static void AssertMultiUpgradeRecovers(string checkpoint)
+    {
+        using var h = new CliHarness(DependencyCliTests.AppAndLib).Ready();
+        CliHarness.Expect(0, h.Run("install", "app@1.0.0", "--yes"));
+        h.SetTemplate("TEMPLATE-2");
+        AssertCrashed(h.RunFault(checkpoint, "upgrade", "--yes"), checkpoint);
+        CliHarness.Expect(0, h.Run("recover"));
+
+        Assert.Empty(h.ListWarnings());
+        var app = h.Installed("app")!;
+        var lib = h.Installed("lib")!;
+        Assert.Contains((app.Version, lib.Version), new[] { ("1.0.0", "1.5.0"), ("2.0.0", "2.0.0") });
+        foreach (var (name, version) in new[] { ("app", app.Version), ("libtool", lib.Version) })
+        {
+            var sidecar = WinBrew.Core.Shims.ShimSidecar.TryParse(File.ReadAllBytes(Path.Combine(h.Bin, name + ".shim.json")))!;
+            Assert.Equal(version, sidecar.Version);
+            Assert.True(File.Exists(sidecar.Target), $"{name} → {sidecar.Target} must be usable");
+            Assert.True(File.Exists(Path.Combine(h.Bin, name + ".exe")));
+        }
+
+        Assert.Empty(h.OldFiles());
+        Assert.Empty(h.StagingLeftovers());
     }
 
     private static void AssertCrashed(CliRun run, string checkpoint) =>

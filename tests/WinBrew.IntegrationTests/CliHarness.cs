@@ -142,6 +142,11 @@ public sealed class CliHarness : IDisposable
         File.WriteAllBytes(Path.Combine(Bin, "wbrew.shim.json"), sidecar.ToUtf8Bytes());
     }
 
+    /// <summary>The plan item for <paramref name="id"/> in an install/upgrade JSON result ("data.plan.items").</summary>
+    public static JsonElement PlanItem(JsonElement json, string id) =>
+        json.GetProperty("data").GetProperty("plan").GetProperty("items").EnumerateArray()
+            .Single(i => i.GetProperty("id").GetString() == id);
+
     public static CliRun Expect(int code, CliRun run)
     {
         Assert.True(run.ExitCode == code, $"expected exit {code}, got:\n{run}");

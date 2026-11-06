@@ -44,6 +44,14 @@ public sealed class UninstallUseCase(LifecycleServices s, MutationSession sessio
             throw new OperationCanceledException("The operation plan was not approved.");
         }
 
+        var warnings = await RemoveAsync(plan, ct);
+        return new UninstallResult(plan, Changed: true, DryRun: false, warnings, scope.Recovered);
+    }
+
+    /// <summary>One journaled uninstall: commit first, then roll-forward file removal. Returns warnings. Used by autoremove too.</summary>
+    public async Task<List<string>> RemoveAsync(UninstallPlan plan, CancellationToken ct)
+    {
+        var warnings = new List<string>();
         var op = await JournaledOperation.StartAsync(s.Journal, s.Faults, OperationType.Uninstall,
             $"uninstall {plan.Repo}/{plan.Id}", ct);
         var intent = new UninstallIntent(plan.Repo, plan.Id, plan.Version, plan.Shims,
@@ -56,7 +64,6 @@ public sealed class UninstallUseCase(LifecycleServices s, MutationSession sessio
             op.AssumeState(OperationState.StateCommitted);
         }, ct);
 
-        var warnings = new List<string>();
         try
         {
             await PostCommit.FinishUninstallAsync(s, op, intent, ct);
@@ -68,34 +75,12 @@ public sealed class UninstallUseCase(LifecycleServices s, MutationSession sessio
                          "the next mutating command or 'wbrew recover' completes it.");
         }
 
-        return new UninstallResult(plan, Changed: true, DryRun: false, warnings, scope.Recovered);
+        return warnings;
     }
 
     private async Task<UninstallPlan> PlanAsync(PackageRequest request, CancellationToken ct)
     {
-        InstalledPackage? installed;
-        if (request.Repo is not null)
-        {
-            installed = await s.Installed.GetInstalledAsync(request.Repo, request.Id, ct);
-        }
-        else
-        {
-            var matches = (await s.Installed.ListInstalledAsync(ct)).Where(p => p.Id == request.Id).ToList();
-            if (matches.Count > 1)
-            {
-                var candidates = matches.Select(m => Identifiers.Qualified(m.Repo, m.Id)).ToList();
-                throw new WinBrewException(WinBrewErrorCode.UsageError,
-                    $"'{request.Id}' is ambiguous; use a qualified id: {string.Join(", ", candidates)} (A9).",
-                    new Dictionary<string, object?> { ["candidates"] = candidates });
-            }
-
-            installed = matches.SingleOrDefault();
-        }
-
-        if (installed is null)
-        {
-            throw new WinBrewException(WinBrewErrorCode.NotFound, $"Package '{request.Id}' is not installed.");
-        }
+        var installed = await InstalledLookup.FindAsync(s.Installed, request.Repo is null ? request.Id : $"{request.Repo}/{request.Id}", ct);
 
         var dependents = await s.Installed.GetDependentsAsync(installed.Repo, installed.Id, ct);
         if (dependents.Count > 0)

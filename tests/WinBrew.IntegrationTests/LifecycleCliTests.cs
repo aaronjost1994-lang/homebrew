@@ -20,7 +20,7 @@ public sealed class LifecycleCliTests
 
         var install = CliHarness.Expect(0, h.Run("install", "hello@1.0.0", "--yes", "--json")).Json();
         Assert.True(install.GetProperty("ok").GetBoolean());
-        Assert.Equal("install", install.GetProperty("data").GetProperty("plan").GetProperty("action").GetString());
+        Assert.Equal("install", CliHarness.PlanItem(install, "hello").GetProperty("action").GetString());
 
         var sidecar = ShimSidecar.TryParse(File.ReadAllBytes(Path.Combine(h.Bin, "hello.shim.json")))!;
         Assert.Equal(Path.Combine(h.Packages, "hello", "1.0.0", "x64", "bin", "hello.exe"), sidecar.Target);
@@ -55,9 +55,9 @@ public sealed class LifecycleCliTests
         using var h = new CliHarness().Ready();
         var before = h.Server.Requests.Count;
 
-        var plan = CliHarness.Expect(0, h.Run("install", "hello", "--dry-run", "--json")).Json().GetProperty("data");
-        Assert.True(plan.GetProperty("dryRun").GetBoolean());
-        Assert.Equal("2.0.0", plan.GetProperty("plan").GetProperty("version").GetString());
+        var plan = CliHarness.Expect(0, h.Run("install", "hello", "--dry-run", "--json")).Json();
+        Assert.True(plan.GetProperty("data").GetProperty("dryRun").GetBoolean());
+        Assert.Equal("2.0.0", CliHarness.PlanItem(plan, "hello").GetProperty("version").GetString());
 
         Assert.Equal(before, h.Server.Requests.Count); // no manifest, no artifact (A8)
         Assert.False(Directory.Exists(Path.Combine(h.Packages, "hello")));
@@ -81,7 +81,7 @@ public sealed class LifecycleCliTests
 
         // The unqualified "latest" also comes from the catalog: 2.0.0, not 3.0.0.
         var plan = CliHarness.Expect(0, h.Run("install", "hello", "--dry-run", "--json")).Json();
-        Assert.Equal("2.0.0", plan.GetProperty("data").GetProperty("plan").GetProperty("version").GetString());
+        Assert.Equal("2.0.0", CliHarness.PlanItem(plan, "hello").GetProperty("version").GetString());
     }
 
     [TestHooksFact]
@@ -108,7 +108,7 @@ public sealed class LifecycleCliTests
         var before = File.GetLastWriteTimeUtc(binary);
         Thread.Sleep(50);
 
-        var plan = CliHarness.Expect(0, h.Run("install", "hello@2.0.0", "--yes", "--json")).Json().GetProperty("data").GetProperty("plan");
+        var plan = CliHarness.PlanItem(CliHarness.Expect(0, h.Run("install", "hello@2.0.0", "--yes", "--json")).Json(), "hello");
         Assert.Equal("upgrade", plan.GetProperty("action").GetString());
         Assert.Equal("1.0.0", plan.GetProperty("previousVersion").GetString());
 
@@ -202,18 +202,9 @@ public sealed class LifecycleCliTests
         using var h = new CliHarness(r => r.Add(new FixturePackage("legacy", "1.0.0",
             [("l.exe", PeBytes.Create(PeBytes.I386))], [("legacy", "l.exe")], Architecture: "x86"))).Ready();
         var json = CliHarness.Expect(0, h.Run("install", "legacy", "--yes", "--json")).Json();
-        Assert.True(json.GetProperty("data").GetProperty("plan").GetProperty("architectureFallback").GetBoolean());
+        Assert.True(CliHarness.PlanItem(json, "legacy").GetProperty("architectureFallback").GetBoolean());
         Assert.Contains(json.GetProperty("warnings").EnumerateArray(), w => w.GetString()!.Contains("fallback", StringComparison.Ordinal));
         Assert.True(Directory.Exists(Path.Combine(h.Packages, "legacy", "1.0.0", "x86")));
-    }
-
-    [TestHooksFact]
-    public void PackageWithDependencies_IsRefused_UntilTheResolver()
-    {
-        using var h = new CliHarness(r => r.AddHello().Add(new FixturePackage("app", "1.0.0",
-            [("a.exe", PeBytes.Create())], [("app", "a.exe")], Dependencies: [("hello", "[1.0.0,2.0.0)")]))).Ready();
-        var run = CliHarness.Expect(1, h.Run("install", "app", "--yes", "--json"));
-        Assert.Equal("NotAvailableInThisBuild", run.Json().GetProperty("error").GetProperty("details").GetProperty("reason").GetString());
     }
 
     [TestHooksFact]

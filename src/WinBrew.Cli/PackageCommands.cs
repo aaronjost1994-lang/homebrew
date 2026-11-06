@@ -20,6 +20,8 @@ internal static class PackageCommands
     public static void Build(RootCommand root, Command self, Lazy<IServiceProvider> services)
     {
         root.Subcommands.Add(BuildInstall(services));
+        root.Subcommands.Add(BuildUpgrade(services));
+        MaintenanceCommands.Build(root, services);
         root.Subcommands.Add(BuildUninstall(services));
         root.Subcommands.Add(BuildList(services));
         root.Subcommands.Add(BuildInfo(services));
@@ -32,7 +34,7 @@ internal static class PackageCommands
         }
     }
 
-    // ---- install -------------------------------------------------------------------------
+    // ---- install / upgrade ------------------------------------------------------------------
 
     private static Command BuildInstall(Lazy<IServiceProvider> services)
     {
@@ -40,7 +42,7 @@ internal static class PackageCommands
         var version = new Option<string?>("--version") { Description = "Exact version to install (not together with @<version>, A8)." };
         var dryRun = new Option<bool>("--dry-run") { Description = "Print the plan from the existing catalog; change nothing (A8)." };
 
-        var command = new Command("install", "Install a portable package (single packages without dependencies in this build).");
+        var command = new Command("install", "Install a portable package and its dependencies (D2: resolved before any change).");
         command.Arguments.Add(package);
         command.Options.Add(version);
         command.Options.Add(dryRun);
@@ -54,36 +56,8 @@ internal static class PackageCommands
                 var nonInteractive = await IsNonInteractiveAsync(sp, parseResult, token);
                 var request = new InstallRequest(parseResult.GetRequiredValue(package), parseResult.GetValue(version),
                     parseResult.GetValue(dryRun), parseResult.GetValue(GlobalOptions.Offline));
-
-                var result = await sp.GetRequiredService<InstallUseCase>().ExecuteAsync(request, async (plan, t) =>
-                {
-                    if (!json)
-                    {
-                        RenderInstallPlan(plan);
-                    }
-
-                    return await ApproveAsync(sp, parseResult, nonInteractive, t);
-                }, token);
-
-                if (!json)
-                {
-                    RenderRecovered(result.Recovered);
-                    if (result.DryRun)
-                    {
-                        RenderInstallPlan(result.Plan);
-                        Console.Out.WriteLine("dry run: nothing was changed.");
-                    }
-                    else if (!result.Changed)
-                    {
-                        Console.Out.WriteLine($"{result.Plan.Repo}/{result.Plan.Id} {result.Plan.Version} ({result.Plan.Arch}) is already installed.");
-                    }
-                    else
-                    {
-                        Console.Out.WriteLine($"Installed {result.Plan.Repo}/{result.Plan.Id} {result.Plan.Version} ({result.Plan.Arch})" +
-                            (result.Shims.Count > 0 ? $"; commands: {string.Join(", ", result.Shims)}" : string.Empty) + ".");
-                    }
-                }
-
+                var result = await sp.GetRequiredService<InstallUseCase>().ExecuteAsync(request, Approver(sp, parseResult, nonInteractive, json), token);
+                RenderPlanResult(result, json);
                 return new CommandOutput(result, result.Warnings);
             }, ct);
         });
@@ -91,19 +65,92 @@ internal static class PackageCommands
         return command;
     }
 
-    private static void RenderInstallPlan(InstallPlan plan)
+    private static Command BuildUpgrade(Lazy<IServiceProvider> services)
     {
-        var target = $"{plan.Repo}/{plan.Id} {plan.Version} ({plan.Arch})";
-        var line = plan.Action switch
+        var package = new Argument<string?>("package") { Description = "Package to upgrade (default: every unpinned installed package).", Arity = ArgumentArity.ZeroOrOne };
+        var dryRun = new Option<bool>("--dry-run") { Description = "Print the plan from the existing catalog; change nothing (A8)." };
+        var command = new Command("upgrade", "Upgrade installed packages to the highest satisfying versions (D2 rule 3).");
+        command.Arguments.Add(package);
+        command.Options.Add(dryRun);
+
+        command.SetAction((parseResult, ct) =>
         {
-            "upgrade" => $"Plan: upgrade {plan.Repo}/{plan.Id} {plan.PreviousVersion} ({plan.PreviousArch}) → {plan.Version} ({plan.Arch})",
-            "none" => $"Plan: nothing to do — {target} is already installed",
-            _ => $"Plan: install {target}",
+            var json = parseResult.GetValue(GlobalOptions.Json);
+            return CommandRunner.RunAsync("upgrade", json, async token =>
+            {
+                var sp = services.Value;
+                var nonInteractive = await IsNonInteractiveAsync(sp, parseResult, token);
+                var result = await sp.GetRequiredService<UpgradeUseCase>().ExecuteAsync(
+                    new UpgradeRequest(parseResult.GetValue(package), parseResult.GetValue(dryRun), parseResult.GetValue(GlobalOptions.Offline)),
+                    Approver(sp, parseResult, nonInteractive, json), token);
+                RenderPlanResult(result, json);
+                return new CommandOutput(result, result.Warnings);
+            }, ct);
+        });
+
+        return command;
+    }
+
+    private static PlanApproval Approver(IServiceProvider sp, ParseResult parseResult, bool nonInteractive, bool json) =>
+        async (plan, t) =>
+        {
+            if (!json)
+            {
+                RenderPlan(plan);
+            }
+
+            return await ApproveAsync(sp, parseResult, nonInteractive, t);
         };
-        Console.Out.WriteLine(line);
-        if (plan.ArchitectureFallback)
+
+    private static void RenderPlanResult(PlanResult result, bool json)
+    {
+        if (json)
         {
-            Console.Out.WriteLine($"  architecture fallback: {plan.Arch} (A10)");
+            return;
+        }
+
+        RenderRecovered(result.Recovered);
+        if (result.DryRun)
+        {
+            RenderPlan(result.Plan);
+            Console.Out.WriteLine("dry run: nothing was changed.");
+        }
+        else if (!result.Changed)
+        {
+            Console.Out.WriteLine("Nothing to do: " + string.Join(", ", result.Plan.Items.Select(i => $"{i.Package} {i.Version}")) + " already installed.");
+        }
+        else
+        {
+            var changed = result.Plan.Items.Where(i => i.Changes).Select(i => $"{i.Package} {i.Version} ({i.Arch})");
+            Console.Out.WriteLine("Done: " + string.Join(", ", changed) +
+                (result.Shims.Count > 0 ? $"; commands: {string.Join(", ", result.Shims)}" : string.Empty) + ".");
+        }
+    }
+
+    /// <summary>The full plan (A8): every package of the resolved graph, dependencies first.</summary>
+    private static void RenderPlan(OperationPlan plan)
+    {
+        Console.Out.WriteLine($"Plan ({plan.Command}):");
+        foreach (var item in plan.Items)
+        {
+            var line = item.Action switch
+            {
+                "upgrade" => $"  upgrade  {item.Package} {item.PreviousVersion} → {item.Version}" +
+                             (item.ArchitectureTransition is { } t ? $" [{t}]" : $" ({item.Arch})"),
+                "install" => $"  install  {item.Package} {item.Version} ({item.Arch})",
+                _ => $"  keep     {item.Package} {item.Version} ({item.Arch})",
+            };
+            if (!item.Explicit)
+            {
+                line += " [dependency]";
+            }
+
+            if (item.ArchitectureFallback && item.Changes)
+            {
+                line += " [architecture fallback, A10]";
+            }
+
+            Console.Out.WriteLine(line);
         }
     }
 

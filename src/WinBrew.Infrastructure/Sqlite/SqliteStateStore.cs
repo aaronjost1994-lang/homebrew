@@ -365,42 +365,107 @@ public sealed class SqliteStateStore(string databasePath, TimeProvider time) : I
         return list;
     }
 
-    public async Task CommitInstallAsync(string opId, InstallCommit commit, CancellationToken ct)
+    public async Task CommitPlanAsync(string opId, IReadOnlyList<InstallCommit> commits, CancellationToken ct)
     {
         await using var c = await OpenAsync(write: true, ct);
         await using var tx = (SqliteTransaction)await c.BeginTransactionAsync(ct);
         var now = Now();
-        var p = commit.Package;
 
-        await ExecAsync(c, tx, """
-            INSERT INTO installed_packages(repo, package_id, version, arch, install_type, explicit, installed_at, updated_at)
-            VALUES ($r, $i, $v, $a, 'portable', $e, $ia, $ua)
-            ON CONFLICT(repo, package_id) DO UPDATE SET
-              version = excluded.version, arch = excluded.arch, explicit = MAX(installed_packages.explicit, excluded.explicit),
-              updated_at = excluded.updated_at
-            """, ct, ("$r", p.Repo), ("$i", p.Id), ("$v", p.Version), ("$a", p.Arch), ("$e", p.Explicit ? 1 : 0),
-            ("$ia", p.InstalledAt), ("$ua", p.UpdatedAt));
-
-        foreach (var name in commit.RemovedShimNames)
+        foreach (var commit in commits)
         {
-            await ExecAsync(c, tx, "DELETE FROM shims WHERE name=$n COLLATE NOCASE AND owner_repo=$r AND owner_pkg=$i", ct,
-                ("$n", name), ("$r", p.Repo), ("$i", p.Id));
-        }
-
-        foreach (var shim in commit.Shims)
-        {
+            var p = commit.Package;
             await ExecAsync(c, tx, """
-                INSERT INTO shims(name, owner_repo, owner_pkg, owner_version, target_path, subsystem, template_sha256, created_at, updated_at)
-                VALUES ($n, $r, $i, $v, $t, $s, $h, $now, $now)
-                ON CONFLICT(name) DO UPDATE SET
-                  owner_version = excluded.owner_version, target_path = excluded.target_path,
-                  subsystem = excluded.subsystem, template_sha256 = excluded.template_sha256, updated_at = excluded.updated_at
-                """, ct, ("$n", shim.Name), ("$r", shim.OwnerRepo), ("$i", shim.OwnerPackage), ("$v", shim.OwnerVersion),
-                ("$t", shim.TargetPath), ("$s", shim.Subsystem), ("$h", shim.TemplateSha256), ("$now", now));
+                INSERT INTO installed_packages(repo, package_id, version, arch, install_type, explicit, installed_at, updated_at)
+                VALUES ($r, $i, $v, $a, 'portable', $e, $ia, $ua)
+                ON CONFLICT(repo, package_id) DO UPDATE SET
+                  version = excluded.version, arch = excluded.arch, explicit = MAX(installed_packages.explicit, excluded.explicit),
+                  updated_at = excluded.updated_at
+                """, ct, ("$r", p.Repo), ("$i", p.Id), ("$v", p.Version), ("$a", p.Arch), ("$e", p.Explicit ? 1 : 0),
+                ("$ia", p.InstalledAt), ("$ua", p.UpdatedAt));
+
+            foreach (var name in commit.RemovedShimNames)
+            {
+                await ExecAsync(c, tx, "DELETE FROM shims WHERE name=$n COLLATE NOCASE AND owner_repo=$r AND owner_pkg=$i", ct,
+                    ("$n", name), ("$r", p.Repo), ("$i", p.Id));
+            }
+
+            foreach (var shim in commit.Shims)
+            {
+                await ExecAsync(c, tx, """
+                    INSERT INTO shims(name, owner_repo, owner_pkg, owner_version, target_path, subsystem, template_sha256, created_at, updated_at)
+                    VALUES ($n, $r, $i, $v, $t, $s, $h, $now, $now)
+                    ON CONFLICT(name) DO UPDATE SET
+                      owner_version = excluded.owner_version, target_path = excluded.target_path,
+                      subsystem = excluded.subsystem, template_sha256 = excluded.template_sha256, updated_at = excluded.updated_at
+                    """, ct, ("$n", shim.Name), ("$r", shim.OwnerRepo), ("$i", shim.OwnerPackage), ("$v", shim.OwnerVersion),
+                    ("$t", shim.TargetPath), ("$s", shim.Subsystem), ("$h", shim.TemplateSha256), ("$now", now));
+            }
+
+            // Every edge is recorded (A10); a package's edges are replaced with its current dependencies.
+            await ExecAsync(c, tx, "DELETE FROM dependency_edges WHERE dependent_repo=$r AND dependent_id=$i", ct, ("$r", p.Repo), ("$i", p.Id));
+            foreach (var dep in commit.Dependencies)
+            {
+                var slash = dep.IndexOf('/', StringComparison.Ordinal);
+                await ExecAsync(c, tx, """
+                    INSERT OR IGNORE INTO dependency_edges(dependent_repo, dependent_id, dep_repo, dep_id) VALUES ($r, $i, $dr, $di)
+                    """, ct, ("$r", p.Repo), ("$i", p.Id), ("$dr", dep[..slash]), ("$di", dep[(slash + 1)..]));
+            }
         }
 
         await SetStateInTransactionAsync(c, tx, opId, OperationState.StateCommitted, null, ct);
         await tx.CommitAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<DependencyEdge>> ListDependencyEdgesAsync(CancellationToken ct)
+    {
+        if (!Exists)
+        {
+            return [];
+        }
+
+        await using var c = await OpenAsync(write: false, ct);
+        await using var cmd = Command(c, """
+            SELECT dependent_repo || '/' || dependent_id, dep_repo || '/' || dep_id FROM dependency_edges ORDER BY 1, 2
+            """, null);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        var list = new List<DependencyEdge>();
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new DependencyEdge(r.GetString(0), r.GetString(1)));
+        }
+
+        return list;
+    }
+
+    public async Task<IReadOnlyDictionary<string, string>> GetPinsAsync(CancellationToken ct)
+    {
+        var pins = new Dictionary<string, string>(StringComparer.Ordinal);
+        if (!Exists)
+        {
+            return pins;
+        }
+
+        await using var c = await OpenAsync(write: false, ct);
+        await using var cmd = Command(c, """
+            SELECT p.repo || '/' || p.package_id, i.version FROM pins p
+            JOIN installed_packages i ON i.repo = p.repo AND i.package_id = p.package_id ORDER BY 1
+            """, null);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            pins[r.GetString(0)] = r.GetString(1);
+        }
+
+        return pins;
+    }
+
+    public async Task<bool> SetPinnedAsync(string repo, string id, bool pinned, CancellationToken ct)
+    {
+        await using var c = await OpenAsync(write: true, ct);
+        await using var cmd = Command(c, pinned
+            ? "INSERT OR IGNORE INTO pins(repo, package_id, pinned_at) VALUES ($r, $i, $t)"
+            : "DELETE FROM pins WHERE repo=$r AND package_id=$i", null, ("$r", repo), ("$i", id), ("$t", Now()));
+        return await cmd.ExecuteNonQueryAsync(ct) > 0;
     }
 
     public async Task CommitUninstallAsync(string opId, string repo, string id, CancellationToken ct)

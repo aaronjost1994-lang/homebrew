@@ -158,7 +158,14 @@ internal static class ServiceConfigurator
         builder.Services.AddSingleton<GetConfigValueUseCase>();
         builder.Services.AddSingleton<SetConfigValueUseCase>();
         builder.Services.AddSingleton<ListConfigUseCase>();
+        builder.Services.AddSingleton<ResolutionPlanner>();
+        builder.Services.AddSingleton<PlanExecutor>();
         builder.Services.AddSingleton<InstallUseCase>();
+        builder.Services.AddSingleton<UpgradeUseCase>();
+        builder.Services.AddSingleton<OutdatedUseCase>();
+        builder.Services.AddSingleton<PinUseCase>();
+        builder.Services.AddSingleton<AutoremoveUseCase>();
+        builder.Services.AddSingleton<CleanupUseCase>();
         builder.Services.AddSingleton<UninstallUseCase>();
         builder.Services.AddSingleton<ListUseCase>();
         builder.Services.AddSingleton<InfoUseCase>();

@@ -52,4 +52,19 @@ public sealed class ArtifactCache(string artifactsDirectory, IPackageFileSystem 
         await files.MoveFileAsync(verifiedFile, path, overwrite: true, ct);
         return path;
     }
+
+    public IReadOnlyList<CacheEntry> List()
+    {
+        if (!Directory.Exists(artifactsDirectory))
+        {
+            return [];
+        }
+
+        return new DirectoryInfo(artifactsDirectory).EnumerateFiles()
+            .Where(f => f.Name.Length == 64 && f.Name.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f'))
+            .Select(f => new CacheEntry(f.Name, f.Length, f.LastWriteTimeUtc))
+            .OrderBy(e => e.LastWrite)
+            .ThenBy(e => e.Sha256, StringComparer.Ordinal)
+            .ToList();
+    }
 }
