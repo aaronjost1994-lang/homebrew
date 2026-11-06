@@ -172,7 +172,7 @@ public sealed class SelfInstallTests
         }
     }
 
-    [WindowsFact("PATH integration writes HKCU (a disposable key via WINBREW_TEST_PATH_KEY)")]
+    [WindowsTestHooksFact("PATH integration writes HKCU (a disposable key via WINBREW_TEST_PATH_KEY)")]
     public void SelfInstall_ModifyPath_UsesTheTestHive()
     {
         using var h = new CliHarness().Ready();

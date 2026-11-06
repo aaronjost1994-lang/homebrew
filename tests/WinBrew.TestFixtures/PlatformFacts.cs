@@ -33,6 +33,26 @@ public sealed class TestHooksFactAttribute : FactAttribute
     }
 }
 
+/// <summary>
+/// A fact that needs BOTH Windows and the test-hooks build (e.g. HKCU PATH
+/// tests that also use the localhost or fault-injection seams). Skipped, with
+/// the missing prerequisite named, otherwise.
+/// </summary>
+public sealed class WindowsTestHooksFactAttribute : FactAttribute
+{
+    public WindowsTestHooksFactAttribute(string reason = "Needs Windows")
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            Skip = $"{reason} (not run on {Environment.OSVersion.Platform}).";
+        }
+        else if (!TestBuild.TestHooks)
+        {
+            Skip = "Needs the test-hooks build: dotnet test -p:WinBrewTestHooks=true (A11/A16).";
+        }
+    }
+}
+
 /// <summary>Theory variant of <see cref="TestHooksFactAttribute"/>.</summary>
 public sealed class TestHooksTheoryAttribute : TheoryAttribute
 {

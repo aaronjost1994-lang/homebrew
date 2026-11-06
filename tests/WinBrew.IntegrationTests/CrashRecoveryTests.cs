@@ -165,14 +165,9 @@ public sealed class CrashRecoveryTests
         }
     }
 
-    [WindowsFact("path.updated needs HKCU (a disposable key via WINBREW_TEST_PATH_KEY)")]
+    [WindowsTestHooksFact("path.updated needs HKCU (a disposable key via WINBREW_TEST_PATH_KEY)")]
     public void CrashAtPathUpdated_ThenRecover_RollsForward()
     {
-        if (!TestBuild.TestHooks)
-        {
-            Assert.Fail("Needs the test-hooks build (-p:WinBrewTestHooks=true).");
-        }
-
         using var h = new CliHarness().Ready();
         using var hive = new PathTestKey();
         ReleaseFiles.EnsureNextToHost();

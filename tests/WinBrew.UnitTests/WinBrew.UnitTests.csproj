@@ -18,8 +18,12 @@
     <ProjectReference Include="..\..\src\WinBrew.Application\WinBrew.Application.csproj" />
     <ProjectReference Include="..\..\src\WinBrew.Infrastructure\WinBrew.Infrastructure.csproj" />
     <!-- Unit tests exercise the exit-code mapping (D9, A16) and the JSON
-         envelope contract (A16) which live in the Cli project. -->
-    <ProjectReference Include="..\..\src\WinBrew.Cli\WinBrew.Cli.csproj" />
+         envelope contract (A16), which live in the Cli sources. They go
+         through the framework-dependent CliTestHost (same sources): the
+         self-contained src/WinBrew.Cli is pinned to win-x64 for RID-less
+         builds (ADR-0002) and its wbrew.dll does not load in an ARM64
+         test host. -->
+    <ProjectReference Include="..\WinBrew.CliTestHost\WinBrew.CliTestHost.csproj" />
     <ProjectReference Include="..\WinBrew.TestFixtures\WinBrew.TestFixtures.csproj" />
   </ItemGroup>
 

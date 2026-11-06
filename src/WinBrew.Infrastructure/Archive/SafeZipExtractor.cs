@@ -54,13 +54,22 @@ public sealed class SafeZipExtractor : IArchiveExtractor
     {
         var ignoreCase = OperatingSystem.IsWindows();
         ZipArchive archive;
+        var stream = File.OpenRead(zipPath);
         try
         {
-            archive = new ZipArchive(File.OpenRead(zipPath), ZipArchiveMode.Read, leaveOpen: false);
+            archive = new ZipArchive(stream, ZipArchiveMode.Read, leaveOpen: false);
         }
         catch (InvalidDataException ex)
         {
+            // The constructor does not own the stream until it succeeds; a
+            // leaked handle would keep the (cached) artifact locked on Windows.
+            await stream.DisposeAsync();
             throw Reject(null, $"the artifact is not a valid ZIP archive: {ex.Message}", "Corrupt");
+        }
+        catch
+        {
+            await stream.DisposeAsync();
+            throw;
         }
 
         using (archive)

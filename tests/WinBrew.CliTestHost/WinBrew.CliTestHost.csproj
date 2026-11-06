@@ -25,6 +25,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Unit tests reach the internal source-gen envelope types (A16). -->
+    <InternalsVisibleTo Include="WinBrew.UnitTests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\..\src\WinBrew.Application\WinBrew.Application.csproj" />
     <ProjectReference Include="..\..\src\WinBrew.Infrastructure\WinBrew.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\WinBrew.Windows\WinBrew.Windows.csproj" />
