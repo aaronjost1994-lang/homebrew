@@ -15,6 +15,11 @@
          Managed single-file bundles; e_sqlite3.dll ships NEXT TO
          wbrew.exe; nothing is ever extracted to %TEMP%. -->
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- RID-less builds/restores target win-x64 explicitly (Phase F, ADR-0002):
+         SelfContained/PublishAot otherwise make the SDK add the HOST RID,
+         so packages.lock.json would differ between Linux and Windows hosts
+         (NU1004 in locked mode). -r <rid> still overrides this. -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>
     <IncludeNativeLibrariesForSelfExtract>false</IncludeNativeLibrariesForSelfExtract>

@@ -41,3 +41,17 @@ per-RID lock files restored for `win-x64` and `win-arm64` (A4) and committed.
   locks, or regenerate the locks and fail on drift (git diff check) — the
   exact recipe is a Phase F ci.yml decision, recorded here so it is not
   rediscovered.
+
+### Phase F resolution (2026-11-06, found by the first Windows CI run)
+
+- The first `ci.yml` run failed with NU1004 on windows-latest: the
+  Linux-generated `WinBrew.Cli`/`WinBrew.Shim` locks carried `linux-x64`
+  because `SelfContained`/`PublishAot` without a RID make the SDK add the
+  HOST RID to restore.
+- Fix: both projects set `RuntimeIdentifier=win-x64` when none is given
+  (`-r` still overrides). The RID set is now `win-x64;win-arm64` on every
+  host and the locks were regenerated (only the `linux-x64` sections went
+  away).
+- CI recipe: ONE `dotnet restore WinBrew.sln --locked-mode` (validates both
+  RID sections), then `dotnet publish -r <rid> --no-restore`; a `git diff
+  --exit-code` step fails if anything rewrote a lock file.

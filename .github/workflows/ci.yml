@@ -44,16 +44,13 @@ jobs:
         with:
           global-json-file: global.json
 
-      - name: Locked restore (solution + every published RID)
-        shell: pwsh
-        run: |
-          dotnet restore WinBrew.sln --locked-mode
-          foreach ($project in 'src/WinBrew.Cli', 'src/WinBrew.Shim', 'src/WinBrew.ElevatedHelper') {
-            foreach ($rid in 'win-x64', 'win-arm64') {
-              dotnet restore $project -r $rid --locked-mode
-              if ($LASTEXITCODE -ne 0) { throw "locked restore failed: $project $rid" }
-            }
-          }
+      - name: Locked restore (validates every published RID's lock section)
+        # WinBrew.Cli, WinBrew.Shim and WinBrew.ElevatedHelper declare
+        # RuntimeIdentifiers=win-x64;win-arm64, so ONE solution-level locked
+        # restore checks both RID graphs. Per-RID `-r --locked-mode` restores
+        # are not expressible (NU1004 on the RID-less libraries, ADR-0002);
+        # publishing then runs with --no-restore.
+        run: dotnet restore WinBrew.sln --locked-mode
 
       - name: Build (release)
         run: dotnet build WinBrew.sln -c Release --no-restore
@@ -78,7 +75,7 @@ jobs:
           dotnet test WinBrew.sln -c Release --no-build --logger "trx;LogFilePrefix=testhooks" --results-directory TestResults
           if ($LASTEXITCODE -ne 0) { throw 'test-hooks tests failed' }
 
-      - name: Restore lock files (RID-specific restores must not leave changes)
+      - name: Lock files unchanged (no build or test step may rewrite them)
         run: git diff --exit-code -- '**/packages.lock.json'
 
       - name: Publish + package (this architecture)

@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   For each RID (win-x64, win-arm64):
-    - locked restore for that RID (per-RID packages.lock.json, A4);
+    - one solution-level locked restore (the per-RID lock sections, A4);
     - publishes wbrew.exe (self-contained managed single file), the Native AOT
       wbrew-shim.exe and the v1.1 WinBrew.ElevatedHelper.exe;
     - copies EXACTLY the scripts/publish-files.txt set into <Output>/win-<arch>/
@@ -43,14 +43,16 @@ function Invoke-Dotnet([string[]] $Arguments) {
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 $Output = Resolve-Path $Output
 
+if ($Step -in 'all', 'publish') {
+    # One solution-level locked restore covers every published RID (the RID
+    # sections live in the Cli/Shim/Helper locks, ADR-0002); publish uses --no-restore.
+    Invoke-Dotnet @('restore', (Join-Path $repo 'WinBrew.sln'), '--locked-mode')
+}
+
 foreach ($rid in $(if ($Step -in 'all', 'publish') { $Rids } else { @() })) {
     $stage = Join-Path $Output "publish-$rid"
     $dest = Join-Path $Output $rid
     Remove-Item -Recurse -Force $stage, $dest -ErrorAction SilentlyContinue
-
-    foreach ($project in 'src/WinBrew.Cli', 'src/WinBrew.Shim', 'src/WinBrew.ElevatedHelper') {
-        Invoke-Dotnet @('restore', (Join-Path $repo $project), '-r', $rid, '--locked-mode')
-    }
 
     Invoke-Dotnet @('publish', (Join-Path $repo 'src/WinBrew.Cli'), '-c', 'Release', '-r', $rid, '--self-contained', 'true',
         '--no-restore', "-p:Version=$Version", '-o', $stage)

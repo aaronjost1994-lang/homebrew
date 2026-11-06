@@ -14,6 +14,11 @@
          AOT publishing must run on Windows (cross-OS native compilation
          is not supported; PROBES.md §4). RIDs: win-x64, win-arm64. -->
     <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <!-- RID-less builds/restores target win-x64 explicitly (Phase F, ADR-0002):
+         SelfContained/PublishAot otherwise make the SDK add the HOST RID,
+         so packages.lock.json would differ between Linux and Windows hosts
+         (NU1004 in locked mode). -r <rid> still overrides this. -->
+    <RuntimeIdentifier Condition="'$(RuntimeIdentifier)' == ''">win-x64</RuntimeIdentifier>
     <PublishAot>true</PublishAot>
     <InvariantGlobalization>true</InvariantGlobalization>
     <UseSystemResourceKeys>true</UseSystemResourceKeys>
