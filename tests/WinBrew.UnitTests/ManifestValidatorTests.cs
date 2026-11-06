@@ -122,8 +122,7 @@ public class ManifestValidatorTests
     {
         var errors = ManifestValidator.Validate(ValidManifest() with
         {
-            Installer = System.Text.Json.JsonSerializer.SerializeToElement(
-                new { type = "msi" }),
+            Installer = new WinBrew.Core.Installers.InstallerDeclaration("msi"),
         });
         Assert.Contains(errors, e => e.Field == "installer");
     }

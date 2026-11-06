@@ -6,6 +6,20 @@ semantics; versions are `NuGetVersion`-normalized (D3).
 
 ## [Unreleased]
 
+### Added (Phase E — v1.1, 2026-11-06; Windows-runner checks pending)
+- MSI and EXE installer packages: typed `installer` declarations, explicit
+  consent (`--allow-installer`), `--scope machine`, ProductCode tracking,
+  context confirmation, EXE detection rules (ambiguous → exit 8),
+  msiexec exit-code mapping (1618 retried, then exit 13 `InstallerBusy`).
+- `WinBrew.ElevatedHelper.exe`: typed request file only; refuses untrusted
+  `%ProgramData%\WinBrew` directories (owner + DACL + reparse checks on
+  handles), creates its directories with their final protected descriptor,
+  runs only a hash-verified copy held open with `FileShare.Read`.
+- Reconciliation in `list` and `doctor` (drift reported, never corrected);
+  `self uninstall` refuses while installer-managed packages remain.
+- Schema migration v3 (`installer_packages`); WiX fixture MSI and fixture
+  EXE sources with `scripts/build-installer-fixtures.ps1`.
+
 ### Added (Phase D — complete, 2026-11-06)
 - Simplified-TUF repository trust (D6): ECDSA P-256 envelopes over exact
   payload bytes, SPKI rules checked before import, thresholds, root rotation

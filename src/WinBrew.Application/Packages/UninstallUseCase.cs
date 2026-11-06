@@ -5,7 +5,7 @@ using WinBrew.Core.Operations;
 
 namespace WinBrew.Application.Packages;
 
-public sealed record UninstallRequest(string Package, bool DryRun);
+public sealed record UninstallRequest(string Package, bool DryRun, Installers.InstallerOptions? Installer = null);
 
 public sealed record UninstallPlan(string Repo, string Id, string Version, string Arch, IReadOnlyList<string> Shims);
 
@@ -20,7 +20,7 @@ public delegate Task<bool> UninstallApproval(UninstallPlan plan, CancellationTok
 /// idempotent roll-forward steps — a crash at any point is finished by
 /// recovery, and a running shim's binary becomes a journaled .old file.
 /// </summary>
-public sealed class UninstallUseCase(LifecycleServices s, MutationSession session, RecoveryService recovery)
+public sealed class UninstallUseCase(LifecycleServices s, MutationSession session, RecoveryService recovery, IInstallerStore installerStore, Installers.InstallerService installers)
 {
     public async Task<UninstallResult> ExecuteAsync(UninstallRequest request, UninstallApproval approve, CancellationToken ct)
     {
@@ -28,6 +28,25 @@ public sealed class UninstallUseCase(LifecycleServices s, MutationSession sessio
         if (parsed.Version is not null)
         {
             throw new WinBrewException(WinBrewErrorCode.UsageError, "uninstall takes a package without a version.");
+        }
+
+        // v1.1 (A12): an installer-managed package runs its recorded uninstaller.
+        if (await FindInstallerPackageAsync(parsed, ct) is { } managed)
+        {
+            var managedPlan = new UninstallPlan(managed.Repo, managed.Id, managed.Version, managed.Arch, []);
+            if (request.DryRun)
+            {
+                return new UninstallResult(managedPlan, Changed: false, DryRun: true, [], []);
+            }
+
+            using var managedScope = await session.BeginAsync("uninstall", ct);
+            if (!await approve(managedPlan, ct))
+            {
+                throw new OperationCanceledException("The operation plan was not approved.");
+            }
+
+            var managedWarnings = await installers.UninstallAsync(managed, request.Installer ?? Installers.InstallerOptions.None, ct);
+            return new UninstallResult(managedPlan, Changed: true, DryRun: false, managedWarnings, managedScope.Recovered);
         }
 
         if (request.DryRun)
@@ -46,6 +65,17 @@ public sealed class UninstallUseCase(LifecycleServices s, MutationSession sessio
 
         var warnings = await RemoveAsync(plan, ct);
         return new UninstallResult(plan, Changed: true, DryRun: false, warnings, scope.Recovered);
+    }
+
+    private async Task<InstallerPackage?> FindInstallerPackageAsync(PackageRequest request, CancellationToken ct)
+    {
+        if (request.Repo is not null)
+        {
+            return await installerStore.GetInstallerPackageAsync(request.Repo, request.Id, ct);
+        }
+
+        var matches = (await installerStore.ListInstallerPackagesAsync(ct)).Where(p => p.Id == request.Id).ToList();
+        return matches.Count == 1 && !(await s.Installed.ListInstalledAsync(ct)).Any(p => p.Id == request.Id) ? matches[0] : null;
     }
 
     /// <summary>One journaled uninstall: commit first, then roll-forward file removal. Returns warnings. Used by autoremove too.</summary>

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <TargetPlatformIdentifier>Windows</TargetPlatformIdentifier>
+    <TargetPlatformVersion>10.0.22000.0</TargetPlatformVersion>
+    <SupportedOSPlatformVersion>10.0.19041.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>WinBrew.ElevatedHelper</AssemblyName>
+    <RootNamespace>WinBrew.ElevatedHelper</RootNamespace>
+    <Description>WinBrew elevated helper (A12, v1.1): started with runas once per elevated MSI/EXE operation; accepts only a typed request file. The rest of WinBrew is never elevated.</Description>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\WinBrew.Windows\WinBrew.Windows.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="app.manifest" />
+    <ApplicationManifest Include="app.manifest" />
+  </ItemGroup>
+
+</Project>

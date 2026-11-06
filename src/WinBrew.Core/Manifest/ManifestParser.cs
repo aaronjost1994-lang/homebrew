@@ -38,7 +38,7 @@ public static class ManifestParser
             Executables = (IReadOnlyList<ManifestExecutable>?)manifest.Executables ?? [],
         };
 
-        var errors = ManifestValidator.Validate(manifest, testHooksBuild);
+        var errors = ManifestValidator.Validate(manifest, testHooksBuild, allowV11: true); // v1.1 client (Phase E)
         if (errors.Count > 0)
         {
             throw new WinBrewException(

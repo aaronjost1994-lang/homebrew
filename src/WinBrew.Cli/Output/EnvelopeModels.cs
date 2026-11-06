@@ -81,6 +81,7 @@ public sealed record ConfigListData(IReadOnlyList<ConfigValueRow> Values);
 [JsonSerializable(typeof(UninstallPlan))]
 [JsonSerializable(typeof(ListResult))]
 [JsonSerializable(typeof(InstalledRow))]
+[JsonSerializable(typeof(InstallerRow))]
 [JsonSerializable(typeof(InfoResult))]
 [JsonSerializable(typeof(InfoVersion))]
 [JsonSerializable(typeof(RecoverResult))]

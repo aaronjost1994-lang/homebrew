@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
+using WinBrew.Application.Installers;
 using WinBrew.Application.Lifecycle;
 using WinBrew.Application.Packages;
 using WinBrew.Application.Ports;
@@ -34,11 +35,15 @@ internal static class PackageCommands
         var package = new Argument<string>("package") { Description = "<package>[@<version>] — '<id>' or '<repo>/<id>' (A9)." };
         var version = new Option<string?>("--version") { Description = "Exact version to install (not together with @<version>, A8)." };
         var dryRun = new Option<bool>("--dry-run") { Description = "Print the plan from the existing catalog; change nothing (A8)." };
+        var allowInstaller = AllowInstallerOption();
+        var scope = ScopeOption();
 
-        var command = new Command("install", "Install a portable package and its dependencies (D2: resolved before any change).");
+        var command = new Command("install", "Install a package and its dependencies (D2: resolved before any change); MSI/EXE need --allow-installer.");
         command.Arguments.Add(package);
         command.Options.Add(version);
         command.Options.Add(dryRun);
+        command.Options.Add(allowInstaller);
+        command.Options.Add(scope);
 
         command.SetAction((parseResult, ct) =>
         {
@@ -48,7 +53,8 @@ internal static class PackageCommands
                 var sp = services.Value;
                 var nonInteractive = await IsNonInteractiveAsync(sp, parseResult, token);
                 var request = new InstallRequest(parseResult.GetRequiredValue(package), parseResult.GetValue(version),
-                    parseResult.GetValue(dryRun), parseResult.GetValue(GlobalOptions.Offline));
+                    parseResult.GetValue(dryRun), parseResult.GetValue(GlobalOptions.Offline),
+                    new InstallerOptions(parseResult.GetValue(allowInstaller), parseResult.GetValue(scope) ?? "user"));
                 var result = await sp.GetRequiredService<InstallUseCase>().ExecuteAsync(request, Approver(sp, parseResult, nonInteractive, json), token);
                 RenderPlanResult(result, json);
                 return new CommandOutput(result, result.Warnings);
@@ -153,9 +159,11 @@ internal static class PackageCommands
     {
         var package = new Argument<string>("package") { Description = "'<id>' or '<repo>/<id>'." };
         var dryRun = new Option<bool>("--dry-run") { Description = "Print what would be removed; change nothing." };
-        var command = new Command("uninstall", "Uninstall a package (refused while another package depends on it, D8).");
+        var allowInstaller = AllowInstallerOption();
+        var command = new Command("uninstall", "Uninstall a package (refused while another package depends on it, D8); MSI/EXE need --allow-installer.");
         command.Arguments.Add(package);
         command.Options.Add(dryRun);
+        command.Options.Add(allowInstaller);
 
         command.SetAction((parseResult, ct) =>
         {
@@ -165,7 +173,8 @@ internal static class PackageCommands
                 var sp = services.Value;
                 var nonInteractive = await IsNonInteractiveAsync(sp, parseResult, token);
                 var result = await sp.GetRequiredService<UninstallUseCase>().ExecuteAsync(
-                    new UninstallRequest(parseResult.GetRequiredValue(package), parseResult.GetValue(dryRun)),
+                    new UninstallRequest(parseResult.GetRequiredValue(package), parseResult.GetValue(dryRun),
+                        new InstallerOptions(parseResult.GetValue(allowInstaller), "user")),
                     async (plan, t) =>
                     {
                         if (!json)
@@ -216,7 +225,7 @@ internal static class PackageCommands
                 var result = await services.Value.GetRequiredService<ListUseCase>().ExecuteAsync(token);
                 if (!json)
                 {
-                    if (result.Packages.Count == 0)
+                    if (result.Packages.Count == 0 && result.Installers.Count == 0)
                     {
                         Console.Out.WriteLine("No packages installed.");
                     }
@@ -224,6 +233,11 @@ internal static class PackageCommands
                     foreach (var p in result.Packages)
                     {
                         Console.Out.WriteLine($"{p.Package} {p.Version} ({p.Arch})" + (p.Explicit ? string.Empty : " [dependency]"));
+                    }
+
+                    foreach (var p in result.Installers)
+                    {
+                        Console.Out.WriteLine($"{p.Package} {p.Version} ({p.Arch}) [{p.Type}, {p.Scope}, {p.State}]" + (p.Drift is null ? "" : " DRIFT"));
                     }
                 }
 
@@ -335,6 +349,21 @@ internal static class PackageCommands
             }, ct);
         });
         return command;
+    }
+
+    private static Option<bool> AllowInstallerOption() => new("--allow-installer")
+    {
+        Description = "Consent to running an MSI/EXE installer (executable code chosen by the repository). Never implied by --yes (A8).",
+    };
+
+    private static Option<string?> ScopeOption()
+    {
+        var option = new Option<string?>("--scope")
+        {
+            Description = "user (default) or machine: per-machine installs run through the elevated helper (UAC prompt, A12).",
+        };
+        option.AcceptOnlyFromAmong("user", "machine");
+        return option;
     }
 
     // ---- consent (A8) --------------------------------------------------------------------------

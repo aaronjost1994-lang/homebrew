@@ -10,7 +10,7 @@ namespace WinBrew.Application.Doctor;
 /// RecoveryFailed reports (A11), and journaled .old files still awaiting
 /// cleanup (D4, PLAN §1).
 /// </summary>
-public sealed class LifecycleDoctorChecks(LifecycleServices s)
+public sealed class LifecycleDoctorChecks(LifecycleServices s, Ports.IInstallerStore installerStore, Installers.InstallerService installers)
 {
     public async Task AddChecksAsync(List<DoctorCheck> checks, CancellationToken ct)
     {
@@ -22,6 +22,22 @@ public sealed class LifecycleDoctorChecks(LifecycleServices s)
 
         await CheckTemplateAsync(checks, ct);
         await CheckJournalAsync(checks, ct);
+        await CheckInstallersAsync(checks, ct);
+    }
+
+    /// <summary>A12: MsiQueryProductState / detection drift for installer-managed packages, reported only.</summary>
+    private async Task CheckInstallersAsync(List<DoctorCheck> checks, CancellationToken ct)
+    {
+        var managed = await installerStore.ListInstallerPackagesAsync(ct);
+        if (managed.Count == 0)
+        {
+            return;
+        }
+
+        var drift = managed.Select(installers.Reconcile).Where(d => d is not null).ToList();
+        checks.Add(drift.Count == 0
+            ? new("installers.reconcile", DoctorStatus.Ok, $"{managed.Count} installer-managed package(s) match Windows Installer / their detection rules.")
+            : new("installers.reconcile", DoctorStatus.Warn, "Drift (not corrected): " + string.Join(" | ", drift)));
     }
 
     private async Task CheckTemplateAsync(List<DoctorCheck> checks, CancellationToken ct)

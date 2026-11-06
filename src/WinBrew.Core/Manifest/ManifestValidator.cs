@@ -11,7 +11,7 @@ public sealed record ManifestError(string Field, string Message)
 /// <summary>
 /// Manifest validation beyond the JSON Schema (A9). Collects all findings
 /// (author-friendly) instead of throwing on the first. The v1.0 client
-/// rejects installer-bearing manifests; Phase E flips that switch.
+/// rejects installer-bearing manifests; the v1.1 client (Phase E) validates them.
 /// </summary>
 public static partial class ManifestValidator
 {
@@ -127,11 +127,165 @@ public static partial class ManifestValidator
             }
         }
 
-        if (m.Installer is not null && JsonElementIsDefined(m.Installer.Value) && !allowV11)
+        if (m.Installer is not null && !allowV11)
         {
             errors.Add(new("installer", "Installer declarations are a v1.1 feature; " +
                 "the v1.0 client rejects installer-bearing manifests (A9, D1). " +
                 "Installer declarations are executable-code trust decisions, not safe data."));
+        }
+        else if (allowV11)
+        {
+            ValidateInstaller(m, errors);
+        }
+    }
+
+    /// <summary>v1.1 (A9/A12): the installer declaration must match the artifacts exactly and be fully explicit.</summary>
+    private static void ValidateInstaller(Manifest m, List<ManifestError> errors)
+    {
+        var types = m.Artifacts.Select(a => a.InstallType).Distinct(StringComparer.Ordinal).ToList();
+        if (types.Count > 1)
+        {
+            errors.Add(new("artifacts", "All artifacts of a release must share one installType (A9)."));
+            return;
+        }
+
+        var type = types.FirstOrDefault() ?? "portable";
+        var installer = m.Installer;
+        if (type == "portable")
+        {
+            if (installer is not null)
+            {
+                errors.Add(new("installer", "Portable packages carry no installer declaration."));
+            }
+
+            return;
+        }
+
+        if (installer is null || installer.Type != type)
+        {
+            errors.Add(new("installer", $"{type} artifacts need installer.type = \"{type}\" (A12)."));
+            return;
+        }
+
+        if (m.Dependencies.Count > 0)
+        {
+            errors.Add(new("dependencies", "Installer packages cannot declare dependencies in v1.1 (documented limitation)."));
+        }
+
+        if (type == "msi")
+        {
+            ValidateMsi(m, installer, errors);
+        }
+        else
+        {
+            ValidateExe(m, installer, errors);
+        }
+    }
+
+    private static void ValidateMsi(Manifest m, Installers.InstallerDeclaration installer, List<ManifestError> errors)
+    {
+        if (installer.Msi is not { } msi || installer.Exe is not null)
+        {
+            errors.Add(new("installer.msi", "installer.type \"msi\" needs an msi object (and no exe object)."));
+            return;
+        }
+
+        if (!Installers.InstallerArguments.GuidRegex().IsMatch(msi.ProductCode))
+        {
+            errors.Add(new("installer.msi.productCode", "Must be an uppercase braced GUID ({XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX})."));
+        }
+
+        if (msi.UpgradeCode is not null && !Installers.InstallerArguments.GuidRegex().IsMatch(msi.UpgradeCode))
+        {
+            errors.Add(new("installer.msi.upgradeCode", "Must be an uppercase braced GUID."));
+        }
+
+        ValidateProperties("installer.msi.properties", msi.Properties, reservedAllowed: false, errors);
+        ValidateProperties("installer.msi.userProperties", msi.UserProperties, reservedAllowed: true, errors);
+        if (m.Scope.Contains("user") && (msi.UserProperties is null || msi.UserProperties.Count == 0))
+        {
+            errors.Add(new("installer.msi.userProperties", "A 'user' scope MSI must declare the property set it was authored for " +
+                "(e.g. ALLUSERS=2, MSIINSTALLPERUSER=1); per-user installs are never guessed (A12)."));
+        }
+    }
+
+    private static void ValidateProperties(string field, IReadOnlyDictionary<string, string>? properties, bool reservedAllowed, List<ManifestError> errors)
+    {
+        foreach (var (name, value) in properties ?? new Dictionary<string, string>())
+        {
+            if (!Installers.InstallerArguments.PropertyNameRegex().IsMatch(name))
+            {
+                errors.Add(new(field, $"'{name}' is not an MSI public property name (uppercase)."));
+            }
+            else if (!reservedAllowed && Installers.InstallerArguments.ReservedProperties.Contains(name))
+            {
+                errors.Add(new(field, $"'{name}' is controlled by WinBrew (scope/reboot) and cannot be declared here."));
+            }
+
+            if (!Installers.InstallerArguments.PropertyValueRegex().IsMatch(value))
+            {
+                errors.Add(new(field, $"The value of '{name}' contains characters outside the safe set (no spaces, quotes or control characters)."));
+            }
+        }
+    }
+
+    private static void ValidateExe(Manifest m, Installers.InstallerDeclaration installer, List<ManifestError> errors)
+    {
+        if (installer.Exe is not { } exe || installer.Msi is not null)
+        {
+            errors.Add(new("installer.exe", "installer.type \"exe\" needs an exe object (and no msi object)."));
+            return;
+        }
+
+        if (exe.SilentInstallArgs.Count == 0 || !exe.SilentInstallArgs.All(Installers.InstallerArguments.IsSafeArgument))
+        {
+            errors.Add(new("installer.exe.silentInstallArgs", "Explicit silent install arguments are required; switches are never guessed (A12)."));
+        }
+
+        var machineOnly = !m.Scope.Contains("user");
+        ValidatePattern("installer.exe.silentUninstall.path", exe.SilentUninstall.Path, mustBeExe: true, machineOnly, errors);
+        if (!exe.SilentUninstall.Args.All(Installers.InstallerArguments.IsSafeArgument))
+        {
+            errors.Add(new("installer.exe.silentUninstall.args", "Arguments must be non-empty text without control characters."));
+        }
+
+        var detection = exe.Detection;
+        if (detection.UninstallKey is null && detection.File is null)
+        {
+            errors.Add(new("installer.exe.detection", "At least one detection rule (uninstallKey and/or file) is required (A12)."));
+        }
+
+        if (detection.UninstallKey is { } key && (key.Length is 0 or > 128 || key.Any(c => c is '\\' or '/' || char.IsControl(c))))
+        {
+            errors.Add(new("installer.exe.detection.uninstallKey", "Must be a single registry key name (no separators)."));
+        }
+
+        if (detection.File is { } file)
+        {
+            ValidatePattern("installer.exe.detection.file.path", file.Path, mustBeExe: false, machineOnly, errors);
+            if (file.Version is not null && !Version.TryParse(file.Version, out _))
+            {
+                errors.Add(new("installer.exe.detection.file.version", "Must be a dotted numeric file version."));
+            }
+        }
+    }
+
+    private static void ValidatePattern(string field, string pattern, bool mustBeExe, bool machineOnly, List<ManifestError> errors)
+    {
+        if (Installers.InstallerPaths.Split(pattern, out var problem) is not { } split)
+        {
+            errors.Add(new(field, $"'{pattern}' {problem}."));
+            return;
+        }
+
+        if (machineOnly && !Installers.InstallerPaths.IsMachineRoot(split.Root))
+        {
+            errors.Add(new(field, "A machine-only package must use a machine root ({ProgramFiles}, {ProgramFilesX86}, {ProgramData})."));
+        }
+
+        if (mustBeExe && !pattern.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(new(field, "Must name an .exe."));
         }
     }
 
@@ -500,7 +654,4 @@ public static partial class ManifestValidator
 
         return true;
     }
-
-    private static bool JsonElementIsDefined(System.Text.Json.JsonElement element) =>
-        element.ValueKind is not (System.Text.Json.JsonValueKind.Undefined or System.Text.Json.JsonValueKind.Null);
 }

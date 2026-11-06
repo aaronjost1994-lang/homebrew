@@ -21,6 +21,7 @@ COPY src/WinBrew.Infrastructure/*.csproj src/WinBrew.Infrastructure/packages.loc
 COPY src/WinBrew.Windows/*.csproj src/WinBrew.Windows/packages.lock.json src/WinBrew.Windows/
 COPY src/WinBrew.Cli/*.csproj src/WinBrew.Cli/packages.lock.json src/WinBrew.Cli/
 COPY src/WinBrew.Shim/*.csproj src/WinBrew.Shim/packages.lock.json src/WinBrew.Shim/
+COPY src/WinBrew.ElevatedHelper/*.csproj src/WinBrew.ElevatedHelper/packages.lock.json src/WinBrew.ElevatedHelper/
 COPY tests/WinBrew.TestFixtures/*.csproj tests/WinBrew.TestFixtures/packages.lock.json tests/WinBrew.TestFixtures/
 COPY tests/WinBrew.LockHolderHelper/*.csproj tests/WinBrew.LockHolderHelper/packages.lock.json tests/WinBrew.LockHolderHelper/
 COPY tests/WinBrew.CliTestHost/*.csproj tests/WinBrew.CliTestHost/packages.lock.json tests/WinBrew.CliTestHost/

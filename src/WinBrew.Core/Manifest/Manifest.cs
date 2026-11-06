@@ -1,4 +1,3 @@
-using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace WinBrew.Core.Manifests;
@@ -45,13 +44,16 @@ public sealed record Manifest
     public IReadOnlyList<ManifestExecutable> Executables { get; init; } = [];
 
     /// <summary>
-    /// Reserved for v1.1 (MSI/EXE installer declarations, A9/A12). Typed
-    /// shape lands in Phase E; v1.0 validators reject any manifest that
-    /// declares it. Represented as raw JSON to keep the v1 model honest
-    /// about not interpreting installer content.
+    /// MSI/EXE installer declaration (v1.1, A9/A12) — an executable-code
+    /// trust decision, not safe data. Required exactly when the artifacts
+    /// are msi/exe; validated by <see cref="ManifestValidator"/>.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public JsonElement? Installer { get; init; }
+    public Installers.InstallerDeclaration? Installer { get; init; }
+
+    /// <summary>The install type shared by every artifact (portable | msi | exe).</summary>
+    [JsonIgnore]
+    public string InstallType => Artifacts.Count > 0 ? Artifacts[0].InstallType : "portable";
 }
 
 /// <summary>

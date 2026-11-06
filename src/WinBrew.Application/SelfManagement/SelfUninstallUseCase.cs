@@ -15,14 +15,13 @@ public sealed record SelfUninstallResult(
 /// <summary>
 /// <c>wbrew self uninstall [--keep-data]</c> (A14): removes the PATH entry
 /// (when WinBrew manages it) and every shim, and — unless --keep-data —
-/// packages, cache, staging, logs, config and state. It refuses while v1.1
-/// installer-managed packages are installed (schema v1 records only
-/// portable packages; Phase E completes this check). The running
+/// packages, cache, staging, logs, config and state. It refuses (exit 6)
+/// while v1.1 installer-managed packages are installed. The running
 /// executable's directory cannot be deleted, so its path — and anything
 /// still in use — is reported for manual removal. No shell tricks. Every
 /// step is idempotent: re-running finishes an interrupted uninstall.
 /// </summary>
-public sealed class SelfUninstallUseCase(LifecycleServices s, MutationSession session, IStateDatabase database)
+public sealed class SelfUninstallUseCase(LifecycleServices s, MutationSession session, IStateDatabase database, IInstallerStore installerStore)
 {
     public async Task<SelfUninstallResult> ExecuteAsync(bool keepData, Func<CancellationToken, Task<bool>> approve, CancellationToken ct)
     {
@@ -38,8 +37,17 @@ public sealed class SelfUninstallUseCase(LifecycleServices s, MutationSession se
 
         using (var scope = await session.BeginAsync("self uninstall", ct))
         {
-            // A14 refusal: installer-managed (MSI/EXE) packages cannot be removed by deleting files.
-            // Schema v1's CHECK allows only 'portable', so none can exist before Phase E (v1.1).
+            // A14 refusal (v1.1): installer-managed (MSI/EXE) packages cannot be removed by deleting files.
+            var managed = await installerStore.ListInstallerPackagesAsync(ct);
+            if (managed.Count > 0)
+            {
+                var names = managed.Select(p => $"{p.Repo}/{p.Id} ({p.InstallType}, {p.Scope})").ToList();
+                throw new WinBrewException(WinBrewErrorCode.ConflictOrRefused,
+                    $"Installer-managed packages are still installed: {string.Join(", ", names)}. Uninstall them first " +
+                    "(wbrew uninstall <package> --allow-installer); WinBrew is not removed (A14).",
+                    new Dictionary<string, object?> { ["installerPackages"] = names });
+            }
+
             var bin = s.Shims.BinDirectory;
             pathRemoved = scope.Settings.PathManaged && s.UserPath.IsSupported && await s.UserPath.RemoveAsync(bin, ct);
 

@@ -1,0 +1,1 @@
+WinBrew fixture MSI payload.

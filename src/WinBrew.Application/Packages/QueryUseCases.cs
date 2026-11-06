@@ -10,7 +10,13 @@ namespace WinBrew.Application.Packages;
 
 public sealed record InstalledRow(string Package, string Repo, string Id, string Version, string Arch, bool Explicit, IReadOnlyList<string> Shims);
 
-public sealed record ListResult(IReadOnlyList<InstalledRow> Packages, [property: System.Text.Json.Serialization.JsonIgnore] IReadOnlyList<string> Warnings);
+public sealed record InstallerRow(string Package, string Repo, string Id, string Version, string Arch, string Type, string Scope, string? ProductCode, string State, string? Drift);
+
+public sealed record ListResult(IReadOnlyList<InstalledRow> Packages, [property: System.Text.Json.Serialization.JsonIgnore] IReadOnlyList<string> Warnings)
+{
+    /// <summary>Installer-managed packages (v1.1) with explicit reconciliation (A12).</summary>
+    public IReadOnlyList<InstallerRow> Installers { get; init; } = [];
+}
 
 public sealed record InfoVersion(string Version, bool Prerelease, IReadOnlyList<string> Architectures, IReadOnlyList<string> Dependencies);
 
@@ -49,7 +55,7 @@ internal static class ReadOnlyWarnings
 }
 
 /// <summary><c>wbrew list</c>: installed packages. Read-only: no lock, WAL snapshot reads (D5).</summary>
-public sealed class ListUseCase(IInstalledStore installed, IOperationJournal journal)
+public sealed class ListUseCase(IInstalledStore installed, IOperationJournal journal, IInstallerStore installerStore, Installers.InstallerService installers)
 {
     public async Task<ListResult> ExecuteAsync(CancellationToken ct)
     {
@@ -60,7 +66,21 @@ public sealed class ListUseCase(IInstalledStore installed, IOperationJournal jou
             rows.Add(new InstalledRow(Identifiers.Qualified(p.Repo, p.Id), p.Repo, p.Id, p.Version, p.Arch, p.Explicit, shims));
         }
 
-        return new ListResult(rows, await ReadOnlyWarnings.CollectAsync(journal, ct));
+        var warnings = await ReadOnlyWarnings.CollectAsync(journal, ct);
+        var managed = new List<InstallerRow>();
+        foreach (var p in await installerStore.ListInstallerPackagesAsync(ct))
+        {
+            // A12: reconciliation is explicit — drift is REPORTED, never corrected silently.
+            var drift = installers.Reconcile(p);
+            if (drift is not null)
+            {
+                warnings.Add("Installer drift: " + drift + " Uninstall it with 'wbrew uninstall --allow-installer' or reinstall it.");
+            }
+
+            managed.Add(new InstallerRow(Identifiers.Qualified(p.Repo, p.Id), p.Repo, p.Id, p.Version, p.Arch, p.InstallType, p.Scope, p.ProductCode, p.State, drift));
+        }
+
+        return new ListResult(rows, warnings) { Installers = managed };
     }
 }
 

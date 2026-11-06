@@ -69,7 +69,10 @@ public sealed record FixturePackage(
     string Architecture = "x64",
     IReadOnlyList<(string Id, string Range)>? Dependencies = null,
     bool WritesToInstallDir = false,
-    byte[]? ArchiveOverride = null);
+    byte[]? ArchiveOverride = null,
+    string InstallType = "portable",
+    JsonObject? Installer = null,
+    string[]? Scope = null);
 
 /// <summary>
 /// A locally built repository (A16: fixtures built at test time): artifacts,
@@ -131,7 +134,8 @@ public sealed class FixtureRepository
         return this;
     }
 
-    public string ArtifactPath(FixturePackage p) => Path.Combine(Directory, "artifacts", $"{p.Id}-{p.Version}-{p.Architecture}.zip");
+    public string ArtifactPath(FixturePackage p) => Path.Combine(Directory, "artifacts",
+        $"{p.Id}-{p.Version}-{p.Architecture}.{(p.InstallType == "portable" ? "zip" : p.InstallType)}");
 
     public string ManifestPath(string id, string version) => Path.Combine(Directory, "manifests", id, version + ".json");
 
@@ -163,8 +167,8 @@ public sealed class FixtureRepository
                     ["url"] = new Uri(BaseUrl, $"artifacts/{Path.GetFileName(path)}").ToString(),
                     ["sha256"] = Convert.ToHexStringLower(SHA256.HashData(data)),
                     ["size"] = data.LongLength,
-                    ["format"] = "zip",
-                    ["installType"] = "portable",
+                    ["format"] = p.InstallType == "portable" ? "zip" : p.InstallType,
+                    ["installType"] = p.InstallType,
                 });
             }
 
@@ -179,12 +183,17 @@ public sealed class FixtureRepository
                 ["description"] = $"{first.Id} fixture",
                 ["homepage"] = "https://example.org/",
                 ["license"] = "MIT",
-                ["scope"] = new JsonArray("user"),
+                ["scope"] = new JsonArray((first.Scope ?? ["user"]).Select(x => (JsonNode)x).ToArray()),
                 ["writesToInstallDir"] = first.WritesToInstallDir,
                 ["artifacts"] = artifacts,
                 ["dependencies"] = dependencies,
                 ["executables"] = new JsonArray(first.Executables.Select(e => (JsonNode)new JsonObject { ["name"] = e.Name, ["target"] = e.Target }).ToArray()),
             };
+            if (first.Installer is not null)
+            {
+                manifest["installer"] = first.Installer.DeepClone();
+            }
+
             var manifestBytes = JsonSerializer.SerializeToUtf8Bytes(manifest, Indented);
             var manifestPath = ManifestPath(first.Id, first.Version);
             System.IO.Directory.CreateDirectory(Path.GetDirectoryName(manifestPath)!);

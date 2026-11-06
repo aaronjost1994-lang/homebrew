@@ -128,6 +128,17 @@ internal static class ServiceConfigurator
         builder.Services.AddSingleton<ICatalogStore>(sp => sp.GetRequiredService<SqliteStateStore>());
         builder.Services.AddSingleton<IInstalledStore>(sp => sp.GetRequiredService<SqliteStateStore>());
         builder.Services.AddSingleton<IOperationJournal>(sp => sp.GetRequiredService<SqliteStateStore>());
+        builder.Services.AddSingleton<IInstallerStore>(sp => sp.GetRequiredService<SqliteStateStore>());
+
+        // ---- v1.1 (Phase E): MSI/EXE installers + the elevated helper (A12) ----------------
+        builder.Services.AddSingleton<IInstallerRunner, WinBrew.Windows.Installers.WindowsInstallerRunner>();
+        builder.Services.AddSingleton<IMsiProducts, WinBrew.Windows.Installers.MsiProducts>();
+        builder.Services.AddSingleton<IInstallProbe, WinBrew.Windows.Installers.WindowsInstallProbe>();
+        builder.Services.AddSingleton<IElevatedRunner, WinBrew.Windows.Installers.ElevatedHelperRunner>();
+        builder.Services.AddSingleton(sp => new WinBrew.Application.Installers.InstallerService(
+            sp.GetRequiredService<IInstallerStore>(), sp.GetRequiredService<IInstallerRunner>(), sp.GetRequiredService<IElevatedRunner>(),
+            sp.GetRequiredService<IMsiProducts>(), sp.GetRequiredService<IInstallProbe>(), sp.GetRequiredService<IStorageLayout>(),
+            sp.GetRequiredService<IPackageFileSystem>(), sp.GetRequiredService<TimeProvider>()));
         builder.Services.AddSingleton<IShimStore>(sp => new ShimStore(
             sp.GetRequiredService<StoragePaths>().Directories["bin"], sp.GetRequiredService<IPackageFileSystem>()));
         builder.Services.AddSingleton<IUserPathEditor>(_ => new RegistryUserPathEditor(UserPathKey(flags)));

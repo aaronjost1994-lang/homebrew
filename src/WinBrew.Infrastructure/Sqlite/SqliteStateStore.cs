@@ -17,7 +17,7 @@ namespace WinBrew.Infrastructure.Sqlite;
 /// read-only commands never migrate). Write paths expect the mutating
 /// session to have applied migrations already.
 /// </summary>
-public sealed class SqliteStateStore(string databasePath, TimeProvider time) : ICatalogStore, IInstalledStore, IOperationJournal
+public sealed class SqliteStateStore(string databasePath, TimeProvider time) : ICatalogStore, IInstalledStore, IOperationJournal, IInstallerStore
 {
     private string Now() => time.GetUtcNow().ToString("O", CultureInfo.InvariantCulture);
 
@@ -669,6 +669,57 @@ public sealed class SqliteStateStore(string databasePath, TimeProvider time) : I
             ? "INSERT OR IGNORE INTO pins(repo, package_id, pinned_at) VALUES ($r, $i, $t)"
             : "DELETE FROM pins WHERE repo=$r AND package_id=$i", null, ("$r", repo), ("$i", id), ("$t", Now()));
         return await cmd.ExecuteNonQueryAsync(ct) > 0;
+    }
+
+    // ==== installer-managed packages (v1.1, A12) =========================================
+
+    private const string InstallerColumns =
+        "repo, package_id, version, arch, install_type, scope, product_code, upgrade_code, state, log_path, installer_json, installed_at, updated_at";
+
+    public async Task<InstallerPackage?> GetInstallerPackageAsync(string repo, string id, CancellationToken ct) =>
+        (await ReadInstallersAsync("WHERE repo=$r AND package_id=$i", ct, ("$r", repo), ("$i", id))).SingleOrDefault();
+
+    public Task<IReadOnlyList<InstallerPackage>> ListInstallerPackagesAsync(CancellationToken ct) => ReadInstallersAsync("", ct);
+
+    private async Task<IReadOnlyList<InstallerPackage>> ReadInstallersAsync(string where, CancellationToken ct, params (string, object?)[] p)
+    {
+        if (!Exists)
+        {
+            return [];
+        }
+
+        await using var c = await OpenAsync(write: false, ct);
+        await using var cmd = Command(c, $"SELECT {InstallerColumns} FROM installer_packages {where} ORDER BY repo, package_id", null, p);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        var list = new List<InstallerPackage>();
+        string? S(int i) => r.IsDBNull(i) ? null : r.GetString(i);
+        while (await r.ReadAsync(ct))
+        {
+            list.Add(new InstallerPackage(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4), r.GetString(5),
+                S(6), S(7), r.GetString(8), S(9), r.GetString(10), r.GetString(11), r.GetString(12)));
+        }
+
+        return list;
+    }
+
+    public async Task UpsertInstallerPackageAsync(InstallerPackage package, CancellationToken ct)
+    {
+        var p = package;
+        await using var c = await OpenAsync(write: true, ct);
+        await ExecAsync(c, null, $"""
+            INSERT INTO installer_packages({InstallerColumns}) VALUES ($r, $i, $v, $a, $t, $s, $pc, $uc, $st, $log, $json, $ia, $ua)
+            ON CONFLICT(repo, package_id) DO UPDATE SET version = excluded.version, arch = excluded.arch, install_type = excluded.install_type,
+              scope = excluded.scope, product_code = excluded.product_code, upgrade_code = excluded.upgrade_code, state = excluded.state,
+              log_path = excluded.log_path, installer_json = excluded.installer_json, updated_at = excluded.updated_at
+            """, ct, ("$r", p.Repo), ("$i", p.Id), ("$v", p.Version), ("$a", p.Arch), ("$t", p.InstallType), ("$s", p.Scope),
+            ("$pc", p.ProductCode), ("$uc", p.UpgradeCode), ("$st", p.State), ("$log", p.LogPath), ("$json", p.InstallerJson),
+            ("$ia", p.InstalledAt), ("$ua", p.UpdatedAt));
+    }
+
+    public async Task DeleteInstallerPackageAsync(string repo, string id, CancellationToken ct)
+    {
+        await using var c = await OpenAsync(write: true, ct);
+        await ExecAsync(c, null, "DELETE FROM installer_packages WHERE repo=$r AND package_id=$i", ct, ("$r", repo), ("$i", id));
     }
 
     public async Task CommitTemplateAsync(string opId, string templateSha256, CancellationToken ct)

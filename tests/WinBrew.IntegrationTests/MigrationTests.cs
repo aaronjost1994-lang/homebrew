@@ -68,6 +68,7 @@ public sealed class MigrationTests : IDisposable
             "catalog_architectures", "catalog_dependencies", "installed_packages",
             "dependency_edges", "pins", "shims", "operations", "operation_steps", "journal_files",
             "repository_trust", "self_update_trust", "catalog_search", // v2 (Phase D)
+            "installer_packages",                                     // v3 (Phase E)
         };
 
         using var command = connection.CreateCommand();
@@ -106,7 +107,7 @@ public sealed class MigrationTests : IDisposable
         SqliteConnection.ClearAllPools();
         var db = new SqliteStateDatabase(DbPath, BackupDir);
         await db.ApplyMigrationsAsync(CancellationToken.None);
-        Assert.Equal(2, await db.GetCurrentSchemaVersionAsync(CancellationToken.None));
+        Assert.Equal(Migrations.LatestVersion, await db.GetCurrentSchemaVersionAsync(CancellationToken.None));
 
         var store = new SqliteStateStore(DbPath, TimeProvider.System);
         Assert.Equal("ripgrep", Assert.Single(await store.SearchAsync("oriented", CancellationToken.None)).Id); // trigram path

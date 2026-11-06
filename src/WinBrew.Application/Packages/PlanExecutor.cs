@@ -23,7 +23,7 @@ public sealed record ExecutionResult(IReadOnlyList<string> Shims, IReadOnlyList<
 /// dependency edge; then roll-forward cleanup. Any failure before the commit
 /// compensates the WHOLE plan (previous versions and shims stay usable).
 /// </summary>
-public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
+public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery, Installers.InstallerService installers)
 {
     private const string StagingDownloadName = "download.tmp";
     private const string StagingExtractName = "extract";
@@ -32,7 +32,8 @@ public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
 
     private sealed record Prepared(PlanItem Item, string PackageDirectory, List<ShimPlan> Shims);
 
-    public async Task<ExecutionResult> ExecuteAsync(OperationPlan plan, MutationScope scope, bool offline, CancellationToken ct)
+    public async Task<ExecutionResult> ExecuteAsync(OperationPlan plan, MutationScope scope, bool offline, CancellationToken ct,
+        Installers.InstallerOptions? installerOptions = null)
     {
         var settings = scope.Settings;
         var warnings = new List<string>(plan.Warnings);
@@ -56,6 +57,13 @@ public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
         foreach (var (path, bytes) in verifiedBytes)
         {
             await s.Files.WriteFileAtomicAsync(path, bytes, ct); // cache\metadata: verified manifests only (A6)
+        }
+
+        // v1.1 (A12): an MSI/EXE package runs its installer; it is installed on its own.
+        var installerItems = changing.Where(i => manifests[i.Package].InstallType != "portable").ToList();
+        if (installerItems.Count > 0)
+        {
+            return await ExecuteInstallerAsync(changing, installerItems, manifests, settings, offline, installerOptions ?? Installers.InstallerOptions.None, warnings, ct);
         }
 
         var type = changing.Any(i => i.Action == "upgrade") ? OperationType.Upgrade : OperationType.Install;
@@ -182,12 +190,6 @@ public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
         Dictionary<string, string> claimedShims, List<string> warnings, CancellationToken ct)
     {
         var artifact = manifest.Artifacts.Single(a => a.Architecture == item.Arch);
-        if (artifact.Format != "zip" || artifact.InstallType != "portable")
-        {
-            throw new WinBrewException(WinBrewErrorCode.GeneralFailure,
-                $"{item.Package}@{item.Version} ({item.Arch}) is a {artifact.InstallType}/{artifact.Format} package; " +
-                "MSI/EXE installers arrive in v1.1 (NotAvailableInThisBuild, Phase E).");
-        }
 
         if (manifest.WritesToInstallDir)
         {
@@ -268,6 +270,67 @@ public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
     }
 
     /// <summary>A10: the manifest's id, version, dependencies and architectures must EXACTLY match the catalog entry (exit 5).</summary>
+    private async Task<ExecutionResult> ExecuteInstallerAsync(
+        List<PlanItem> changing, List<PlanItem> installerItems, Dictionary<string, Manifest> manifests, LifecycleSettings settings,
+        bool offline, Installers.InstallerOptions options, List<string> warnings, CancellationToken ct)
+    {
+        if (changing.Count != 1)
+        {
+            throw new WinBrewException(WinBrewErrorCode.ConflictOrRefused,
+                $"{string.Join(", ", installerItems.Select(i => i.Package))} must be installed on its own: an MSI/EXE package cannot share a plan " +
+                "with other changes in v1.1 (no dependencies to or from installer packages).");
+        }
+
+        var item = installerItems[0];
+        var manifest = manifests[item.Package];
+        installers.CheckConsentAndScope(item.Repo, item.Id, manifest.Scope, options);
+        var artifact = manifest.Artifacts.Single(a => a.Architecture == item.Arch);
+        var path = await AcquireInstallerArtifactAsync(artifact, settings, offline, ct);
+        warnings.AddRange(await installers.InstallAsync(
+            new Installers.InstallerJob(item.Repo, item.Id, item.Version, item.Arch, manifest, path, artifact.Sha256, options), ct));
+        return new ExecutionResult([], warnings);
+    }
+
+    /// <summary>Download (or reuse) the installer into the content-addressed cache, SHA-256 verified (A11 step 3).</summary>
+    private async Task<string> AcquireInstallerArtifactAsync(ManifestArtifact artifact, LifecycleSettings settings, bool offline, CancellationToken ct)
+    {
+        if (await s.Cache.TryGetVerifiedAsync(artifact.Sha256, ct) is { } cached)
+        {
+            return cached;
+        }
+
+        if (offline)
+        {
+            throw new WinBrewException(WinBrewErrorCode.NetworkFailure, "--offline: the installer is not in the verified cache (A15).");
+        }
+
+        if (artifact.Size > settings.DownloadMaxBytes)
+        {
+            throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
+                $"The installer declares {artifact.Size} bytes, above download.maxBytes ({settings.DownloadMaxBytes}).");
+        }
+
+        var work = Path.Combine(s.Layout.Directories["staging"], "download-" + Guid.NewGuid().ToString("N"));
+        await s.Files.CreateDirectoryAsync(work, ct);
+        try
+        {
+            var tmp = Path.Combine(work, StagingDownloadName);
+            var fetched = await s.Http.DownloadToFileAsync(new FetchRequest(new Uri(artifact.Url), artifact.Size, settings.DownloadMaxBytes,
+                settings.DownloadTimeout, settings.DownloadRetries, settings.Localhost), tmp, ct);
+            if (fetched.Sha256 != artifact.Sha256)
+            {
+                throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
+                    $"Installer SHA-256 mismatch: the manifest says {artifact.Sha256}, received {fetched.Sha256}.");
+            }
+
+            return await s.Cache.AddVerifiedAsync(tmp, artifact.Sha256, ct);
+        }
+        finally
+        {
+            await s.Files.DeleteDirectoryAsync(work, CancellationToken.None);
+        }
+    }
+
     /// <summary>A15: a locked item's artifact must be exactly the locked URL and SHA-256 (exit 5 before anything changes).</summary>
     public static void EnsureMatchesLock(PlanItem item, Manifest manifest)
     {

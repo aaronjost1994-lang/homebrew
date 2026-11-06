@@ -5,7 +5,7 @@ using WinBrew.Core.Resolution;
 
 namespace WinBrew.Application.Packages;
 
-public sealed record InstallRequest(string Package, string? VersionOption, bool DryRun, bool Offline);
+public sealed record InstallRequest(string Package, string? VersionOption, bool DryRun, bool Offline, Installers.InstallerOptions? Installer = null);
 
 public sealed record UpgradeRequest(string? Package, bool DryRun, bool Offline);
 
@@ -42,7 +42,7 @@ public sealed class InstallUseCase(LifecycleServices s, MutationSession session,
         using var scope = await session.BeginAsync("install", ct);
         var refreshed = await freshness.EnsureForMutationAsync(scope, request.Offline, ct);
         var plan = PlanRunner.WithNotes(await PlanAsync(parsed, ct), refreshed);
-        return await PlanRunner.RunAsync(plan, scope, approve, executor, request.Offline, ct);
+        return await PlanRunner.RunAsync(plan, scope, approve, executor, request.Offline, ct, request.Installer);
     }
 
     private async Task<OperationPlan> PlanAsync(PackageRequest request, CancellationToken ct)
@@ -120,7 +120,8 @@ internal static class PlanRunner
         notes.Count == 0 ? plan : plan with { Warnings = [.. notes, .. plan.Warnings] };
 
     public static async Task<PlanResult> RunAsync(
-        OperationPlan plan, MutationScope scope, PlanApproval approve, PlanExecutor executor, bool offline, CancellationToken ct)
+        OperationPlan plan, MutationScope scope, PlanApproval approve, PlanExecutor executor, bool offline, CancellationToken ct,
+        Installers.InstallerOptions? installer = null)
     {
         if (plan.NothingToDo)
         {
@@ -132,7 +133,7 @@ internal static class PlanRunner
             throw new OperationCanceledException("The operation plan was not approved.");
         }
 
-        var result = await executor.ExecuteAsync(plan, scope, offline, ct);
+        var result = await executor.ExecuteAsync(plan, scope, offline, ct, installer);
         return new PlanResult(plan, true, false, result.Shims, result.Warnings, scope.Recovered);
     }
 }

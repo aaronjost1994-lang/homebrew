@@ -10,7 +10,7 @@ public sealed record Migration(int Version, string Description, string Ddl);
 /// </summary>
 public static class Migrations
 {
-    public const int LatestVersion = 2;
+    public const int LatestVersion = 3;
 
     public static readonly IReadOnlyList<Migration> All =
     [
@@ -207,6 +207,28 @@ public static class Migrations
             );
             INSERT INTO catalog_search(search_text, repo, id)
               SELECT search_text, repo, id FROM catalog_packages;
+            """),
+        new(3, "installer-managed packages (v1.1)", """
+            -- v1.1 (A12): MSI/EXE packages. Kept apart from installed_packages
+            -- (portable: shims, dependency edges, retention) — installer packages
+            -- have none of those. Per-machine installs are recorded here too and
+            -- reconciled through the ProductCode (MsiQueryProductState).
+            CREATE TABLE installer_packages (
+              repo        TEXT NOT NULL,
+              package_id  TEXT NOT NULL,
+              version     TEXT NOT NULL,
+              arch        TEXT NOT NULL,
+              install_type TEXT NOT NULL CHECK (install_type IN ('msi','exe')),
+              scope       TEXT NOT NULL CHECK (scope IN ('user','machine')),
+              product_code TEXT,                    -- MSI ProductCode (braced GUID)
+              upgrade_code TEXT,
+              state       TEXT NOT NULL CHECK (state IN ('Installed','RebootRequired','Unknown')),
+              log_path    TEXT,
+              installer_json TEXT NOT NULL,         -- the declaration at install time (uninstall input)
+              installed_at TEXT NOT NULL,
+              updated_at  TEXT NOT NULL,
+              PRIMARY KEY (repo, package_id)
+            );
             """),
     ];
 }
