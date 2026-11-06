@@ -10,8 +10,7 @@ namespace WinBrew.Cli;
 
 /// <summary>
 /// The System.CommandLine 2.0 stable command tree for every A8 command.
-/// Every v1.0 command is implemented (Phases A–D); v1.1 installer features
-/// (Phase E) report NotAvailableInThisBuild from their use cases (exit 1).
+/// Every v1.0 and v1.1 command is implemented (Phases A–E).
 /// Handlers only parse input, call one use case and render (A5).
 /// </summary>
 internal static class CommandTree

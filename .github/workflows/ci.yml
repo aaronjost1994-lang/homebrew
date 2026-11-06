@@ -1,0 +1,114 @@
+# WinBrew CI (A18). Locked restore for every published RID, build (warnings are
+# errors, analyzers on), unit + integration tests in the release AND the
+# test-hooks build, publish + package both architectures, and run the
+# release-binary checks (zip contents vs scripts/publish-files.txt,
+# SHA256SUMS.txt, no %TEMP% extraction, self install, A17 timings) on the
+# NATIVE runner of each architecture.
+#
+# Action versions are pinned by tag; pin them by commit SHA before the first
+# public release (release-checklist.md).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: windows (${{ matrix.rid }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+          - rid: win-arm64
+            runner: windows-11-arm   # GitHub-hosted Windows ARM64 label; verify it is still current
+    runs-on: ${{ matrix.runner }}
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      DOTNET_NOLOGO: '1'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Locked restore (solution + every published RID)
+        shell: pwsh
+        run: |
+          dotnet restore WinBrew.sln --locked-mode
+          foreach ($project in 'src/WinBrew.Cli', 'src/WinBrew.Shim', 'src/WinBrew.ElevatedHelper') {
+            foreach ($rid in 'win-x64', 'win-arm64') {
+              dotnet restore $project -r $rid --locked-mode
+              if ($LASTEXITCODE -ne 0) { throw "locked restore failed: $project $rid" }
+            }
+          }
+
+      - name: Build (release)
+        run: dotnet build WinBrew.sln -c Release --no-restore
+
+      - name: Test (release build)
+        run: dotnet test WinBrew.sln -c Release --no-build --logger "trx;LogFilePrefix=release" --results-directory TestResults
+
+      - name: Build installer fixtures (WiX MSI + fixture EXE)
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          pwsh scripts/build-installer-fixtures.ps1 -Output "$env:RUNNER_TEMP/installer-fixtures"
+          "WINBREW_INSTALLER_FIXTURES=$env:RUNNER_TEMP/installer-fixtures" >> $env:GITHUB_ENV
+          "WINBREW_DISPOSABLE_RUNNER=1" >> $env:GITHUB_ENV
+
+      - name: Build + test (test-hooks build; crash/fault-injection matrix)
+        shell: pwsh
+        run: |
+          dotnet build WinBrew.sln -c Release --no-restore -p:WinBrewTestHooks=true
+          if ($LASTEXITCODE -ne 0) { throw 'test-hooks build failed' }
+          dotnet test WinBrew.sln -c Release --no-build --logger "trx;LogFilePrefix=testhooks" --results-directory TestResults
+          if ($LASTEXITCODE -ne 0) { throw 'test-hooks tests failed' }
+
+      - name: Restore lock files (RID-specific restores must not leave changes)
+        run: git diff --exit-code -- '**/packages.lock.json'
+
+      - name: Publish + package (this architecture)
+        shell: pwsh
+        run: pwsh scripts/package-release.ps1 -Version 0.0.0-ci -Output out -Rids ${{ matrix.rid }}
+
+      - name: Release-binary checks (E2E project, published binaries)
+        shell: pwsh
+        run: |
+          $env:WINBREW_RELEASE_ZIP = (Resolve-Path "out/wbrew-0.0.0-ci-${{ matrix.rid }}.zip").Path
+          $env:WINBREW_RELEASE_DIR = (Resolve-Path out).Path
+          dotnet test tests/WinBrew.EndToEndTests -c Release --logger "console;verbosity=normal" --logger "trx;LogFilePrefix=e2e" --results-directory TestResults
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ matrix.rid }}
+          path: TestResults
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wbrew-${{ matrix.rid }}-unsigned
+          path: |
+            out/*.zip
+            out/SHA256SUMS.txt
+
+  linux:
+    name: linux (dev-host parity, Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: docker build --target test
+        run: docker build --target test -t winbrew-test .

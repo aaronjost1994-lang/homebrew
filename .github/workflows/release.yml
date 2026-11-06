@@ -1,0 +1,164 @@
+# WinBrew release (A18). Triggered by a version tag. Three stages:
+#   1. publish  — loose binaries for win-x64 and win-arm64 (UNSIGNED).
+#   2. sign     — Authenticode for wbrew.exe, wbrew-shim.exe and
+#                 WinBrew.ElevatedHelper.exe from the PROTECTED environment
+#                 "release-signing" (required reviewers). When the signing
+#                 secrets are absent the stage labels every artifact UNSIGNED;
+#                 it never claims a signature it did not make.
+#   3. package  — zips, SHA256SUMS.txt over every shipped file, CycloneDX SBOM
+#                 (pinned tool version), signature verification (including
+#                 wbrew-shim.exe), and a DRAFT GitHub release.
+# Signing route: Microsoft's managed code-signing service (Trusted Signing,
+# renamed "Artifact Signing" — verify the current name, identity validation
+# and regional eligibility before use) if the owner qualifies; otherwise an
+# OV/EV certificate from a public CA. See docs/release-checklist.md.
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version for a dry run (no release is published)'
+        required: true
+        default: '0.0.0-dryrun'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: windows-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - id: version
+        shell: pwsh
+        run: |
+          $v = if ('${{ github.event_name }}' -eq 'push') { '${{ github.ref_name }}'.TrimStart('v') } else { '${{ inputs.version }}' }
+          "version=$v" >> $env:GITHUB_OUTPUT
+      - name: Publish both architectures (locked, per RID)
+        shell: pwsh
+        run: pwsh scripts/package-release.ps1 -Version ${{ steps.version.outputs.version }} -Output out -Step publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unsigned
+          path: out/win-*
+
+  sign:
+    needs: publish
+    runs-on: windows-latest
+    environment: release-signing   # protected: required reviewers, tag-only deployment
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: unsigned
+          path: out
+      - name: Decide signing
+        id: decide
+        shell: pwsh
+        env:
+          SIGNING_ENDPOINT: ${{ secrets.SIGNING_ENDPOINT }}
+          SIGNING_ACCOUNT: ${{ secrets.SIGNING_ACCOUNT }}
+          SIGNING_PROFILE: ${{ secrets.SIGNING_CERTIFICATE_PROFILE }}
+        run: |
+          $ready = $env:SIGNING_ENDPOINT -and $env:SIGNING_ACCOUNT -and $env:SIGNING_PROFILE
+          "signed=$(if ($ready) { 'true' } else { 'false' })" >> $env:GITHUB_OUTPUT
+          if (-not $ready) { Write-Warning 'Signing secrets are not configured: artifacts will be labeled UNSIGNED (release blocker).' }
+      - name: Azure login (OIDC)
+        if: steps.decide.outputs.signed == 'true'
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Authenticode (managed signing service)
+        if: steps.decide.outputs.signed == 'true'
+        uses: azure/trusted-signing-action@v0.5.1   # verify the action's current name/version (Artifact Signing)
+        with:
+          endpoint: ${{ secrets.SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.SIGNING_CERTIFICATE_PROFILE }}
+          files-folder: out
+          files-folder-filter: exe
+          files-folder-recurse: true
+          file-digest: SHA256
+          timestamp-rfc3161: http://timestamp.acs.microsoft.com
+          timestamp-digest: SHA256
+      - name: Label
+        shell: pwsh
+        run: |
+          $label = if ('${{ steps.decide.outputs.signed }}' -eq 'true') { 'SIGNED' } else { 'UNSIGNED' }
+          Set-Content out/SIGNING.txt "$label — Authenticode status of wbrew.exe, wbrew-shim.exe, WinBrew.ElevatedHelper.exe (verified in the package job)."
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-or-labeled
+          path: out
+
+  package:
+    needs: [publish, sign]
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-or-labeled
+          path: out
+      - name: Verify signatures (or the UNSIGNED label)
+        shell: pwsh
+        run: |
+          $label = (Get-Content out/SIGNING.txt).Split(' ')[0]
+          foreach ($file in Get-ChildItem out -Recurse -Include wbrew.exe, wbrew-shim.exe, WinBrew.ElevatedHelper.exe) {
+            $status = (Get-AuthenticodeSignature $file.FullName).Status
+            Write-Host "$($file.FullName): $status"
+            if ($label -eq 'SIGNED' -and $status -ne 'Valid') { throw "$($file.Name) is not validly signed" }
+            if ($label -eq 'UNSIGNED' -and $status -eq 'Valid') { throw "$($file.Name) is signed but labeled UNSIGNED" }
+          }
+      - name: Zips + SHA256SUMS.txt (unsigned zips carry -UNSIGNED in their name)
+        id: package
+        shell: pwsh
+        run: |
+          $label = (Get-Content out/SIGNING.txt).Split(' ')[0]
+          $name = '${{ needs.publish.outputs.version }}' + $(if ($label -eq 'UNSIGNED') { '-UNSIGNED' } else { '' })
+          "name=$name" >> $env:GITHUB_OUTPUT
+          pwsh scripts/package-release.ps1 -Version $name -Output out -Step package
+      - name: SBOM (CycloneDX, pinned)
+        shell: pwsh
+        run: |
+          dotnet tool install --global CycloneDX --version 5.5.0
+          dotnet CycloneDX src/WinBrew.Cli/WinBrew.Cli.csproj -o out -fn sbom.cdx.json -j
+          if ($LASTEXITCODE -ne 0) { throw 'SBOM generation failed' }
+      - name: Zip contents + checksums (E2E release tests)
+        shell: pwsh
+        run: |
+          $env:WINBREW_RELEASE_ZIP = (Resolve-Path "out/wbrew-${{ steps.package.outputs.name }}-win-x64.zip").Path
+          $env:WINBREW_RELEASE_DIR = (Resolve-Path out).Path
+          dotnet test tests/WinBrew.EndToEndTests -c Release --filter "FullyQualifiedName~ReleaseZipTests"
+      - name: Draft release (tags only)
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          $label = (Get-Content out/SIGNING.txt).Split(' ')[0]
+          $title = "WinBrew ${{ needs.publish.outputs.version }}$(if ($label -eq 'UNSIGNED') { ' (UNSIGNED)' })"
+          gh release create '${{ github.ref_name }}' --draft --title $title --notes-file CHANGELOG.md `
+            (Get-ChildItem out -Filter 'wbrew-*.zip').FullName out/SHA256SUMS.txt out/sbom.cdx.json out/SIGNING.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ needs.publish.outputs.version }}
+          path: |
+            out/*.zip
+            out/SHA256SUMS.txt
+            out/sbom.cdx.json
+            out/SIGNING.txt

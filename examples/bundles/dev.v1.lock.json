@@ -1,0 +1,34 @@
+{
+  "schemaVersion": "1",
+  "winbrewVersion": "1.0.0",
+  "repositories": [
+    {
+      "name": "example",
+      "url": "https://repo.example.invalid/winbrew",
+      "rootKeyFingerprints": ["1111111111111111111111111111111111111111111111111111111111111111"]
+    }
+  ],
+  "packages": [
+    {
+      "repo": "example", "id": "libhello", "version": "1.5.0", "architecture": "x64",
+      "manifestSha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "artifactUrl": "https://repo.example.invalid/winbrew/artifacts/libhello-1.5.0-x64.zip",
+      "artifactSha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "explicit": false
+    },
+    {
+      "repo": "example", "id": "hello", "version": "2.1.0", "architecture": "x64",
+      "manifestSha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "artifactUrl": "https://repo.example.invalid/winbrew/artifacts/hello-2.1.0-x64.zip",
+      "artifactSha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "explicit": true
+    },
+    {
+      "repo": "example", "id": "ripgrep-like", "version": "14.1.0", "architecture": "arm64",
+      "manifestSha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "artifactUrl": "https://repo.example.invalid/winbrew/artifacts/ripgrep-like-14.1.0-arm64.zip",
+      "artifactSha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "explicit": true
+    }
+  ]
+}

@@ -328,6 +328,22 @@ public sealed class BundleAndReleaseFileTests
     }
 
     [Fact]
+    public void VersionedExamples_AreValidBundleAndLockfile()
+    {
+        var dir = AppContext.BaseDirectory;
+        while (!File.Exists(Path.Combine(dir, "WinBrew.sln")))
+        {
+            dir = Path.GetDirectoryName(dir)!;
+        }
+
+        var bundles = Path.Combine(dir, "examples", "bundles");
+        var bundle = BundleFiles.ParseBundle(File.ReadAllBytes(Path.Combine(bundles, "dev.v1.json")), "dev.v1.json");
+        var lockfile = BundleFiles.ParseLockfile(File.ReadAllBytes(Path.Combine(bundles, "dev.v1.lock.json")), "dev.v1.lock.json");
+        Assert.Equal(Path.Combine(bundles, "dev.v1.lock.json"), BundleFiles.DefaultLockPath(Path.Combine(bundles, "dev.v1.json")));
+        Assert.All(bundle.Packages, p => Assert.Contains(lockfile.Packages, l => $"{l.Repo}/{l.Id}" == p.Id));
+    }
+
+    [Fact]
     public void DefaultLockPath_SitsBesideTheBundle()
     {
         var bundle = Path.Combine(Path.GetTempPath(), "dev.json");

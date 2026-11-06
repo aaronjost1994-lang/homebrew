@@ -23,3 +23,13 @@
 # (dotnet publish src/WinBrew.Shim -c Release -r <rid>) and verified there.
 #
 # A CI test must fail if the publish output ever differs from this manifest.
+#
+# ---- machine-readable release-zip set (Phase F) ------------------------------
+# Every non-comment line below is ONE file that wbrew-<ver>-win-<arch>.zip must
+# contain — no more, no less. ReleaseZipTests (tests/WinBrew.EndToEndTests)
+# and scripts/package-release.ps1 read this list; CI fails on any difference.
+# WinBrew.ElevatedHelper.exe is the v1.1 elevated helper (A12, ADR-0012).
+wbrew.exe
+e_sqlite3.dll
+wbrew-shim.exe
+WinBrew.ElevatedHelper.exe

@@ -6,6 +6,27 @@ semantics; versions are `NuGetVersion`-normalized (D3).
 
 ## [Unreleased]
 
+### Added (Phase F — documentation and release hardening, 2026-11-06)
+- Documentation: architecture, CLI reference (full exit-code table incl. 13
+  and the 130-vs-0xC000013A note), manifest and repository/trust
+  specifications, package-author guide (`persist` exclusion,
+  `writesToInstallDir`), security model, STRIDE threat model, recovery and
+  troubleshooting, known limitations, release checklist, release-readiness
+  report; ADRs 0013–0021 and an ADR index.
+- `ci.yml` (Windows x64 + ARM64, locked per-RID restore, release and
+  test-hooks test passes, packaging, release-binary checks; Linux Docker) and
+  `release.yml` (publish → sign in the protected `release-signing`
+  environment or label UNSIGNED → zips, SHA256SUMS.txt, CycloneDX SBOM,
+  signature verification, draft release).
+- `scripts/package-release.ps1`, `scripts/wbrew-completion.ps1`;
+  machine-readable release-zip set in `scripts/publish-files.txt`;
+  release-artifact tests (`tests/WinBrew.EndToEndTests`).
+- Versioned example bundle and lockfile (`examples/bundles/`).
+
+### Changed
+- `self install` / `self update` also copy `WinBrew.ElevatedHelper.exe` when
+  it ships next to `wbrew.exe`.
+
 ### Added (Phase E — v1.1, 2026-11-06; Windows-runner checks pending)
 - MSI and EXE installer packages: typed `installer` declarations, explicit
   consent (`--allow-installer`), `--scope machine`, ProductCode tracking,

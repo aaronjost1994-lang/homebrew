@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "1",
+  "repositories": [
+    { "name": "example", "url": "https://repo.example.invalid/winbrew" }
+  ],
+  "packages": [
+    { "id": "example/hello", "range": "[2.0.0,3.0.0)" },
+    { "id": "example/ripgrep-like", "pinned": true }
+  ]
+}

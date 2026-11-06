@@ -1,12 +1,13 @@
-# examples/ — fixture content (A5 tree)
+# examples/
 
-Signed fixture repository, example manifests and bundles live here, built
-and labeled **TEST ONLY** by the test infrastructure. No public URLs,
-checksums or installer switches are ever invented (A9).
+Illustrative files. **Nothing here points at a real repository**: URLs use the
+reserved `.invalid` domain, and digests and fingerprints are placeholders.
 
-- `manifests/` — example package manifests (validated against
-  `schemas/manifest.v1.schema.json` and the typed validator). Arrive with
-  the fixture-builder work in the tests sub-sessions.
-- `repository/` — a signed fixture repository (test keys only, labeled
-  TEST ONLY) for trust tests (Phase D).
-- `bundles/` — versioned example bundle and lockfile (Phase D, A15).
+- `bundles/dev.v1.json` + `bundles/dev.v1.lock.json` — a versioned example
+  bundle (bundle.v1) and its lockfile (lockfile.v1). `bundle install --file
+  dev.v1.json --locked` reads the lock from `dev.v1.lock.json` beside it.
+  `BundleAndReleaseFileTests` parses both, so they stay valid.
+- Signed fixture repositories are generated, never committed:
+  `scripts/new-fixture-repo.ps1` (TEST ONLY keys) and
+  `WinBrew.TestFixtures.RepositorySigner`.
+- Manifest examples: `docs/manifest-spec.md`.

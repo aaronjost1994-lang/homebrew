@@ -1,10 +1,9 @@
 # WinBrew — planning prompts + implementation
 
-**Version:** 2.3.1 (2026-11-03) · **Status:** Phases A–E
-**complete** on the Linux dev host (`docs/checkpoints/phase-e.md`: unit
-596/596, integration 219 passed in the test-hooks build; Windows-only tests —
-including every real MSI/EXE/ACL check — skip with a reason until Windows
-CI). Phase F is next.
+**Version:** 2.3.1 (2026-11-03) · **Status:** all phases (0, A–F)
+implemented; verified on the Linux dev host (`docs/checkpoints/phase-f.md`).
+**Not yet released:** the Windows CI matrix, signing and release
+infrastructure are open blockers — see `docs/release-readiness.md`.
 
 This private repository holds BOTH:
 
@@ -25,6 +24,33 @@ affiliation): Homebrew (UX and command vocabulary), Scoop (per-user
 portable installs and the shim model), winget manifest schema (prior
 art), The Update Framework (trust model), PubGrub (dependency
 resolution), Cargo's sparse index (catalog model).
+
+## Quick start (once a release exists)
+
+```powershell
+# 1. Download wbrew-<ver>-win-x64.zip (or -win-arm64) and SHA256SUMS.txt from the release page,
+#    verify the hash, extract anywhere, then:
+.\wbrew.exe self install --modify-path      # copies itself to %LOCALAPPDATA%\WinBrew, adds bin\ to PATH
+# 2. In a new shell: add a repository after verifying its root key fingerprint out of band
+wbrew repo add <name> https://<repository-url> --trust-root <fingerprint>
+# 3. Find, install, run, upgrade, remove
+wbrew search <text>
+wbrew install <package>          # shows the full plan; --yes approves it
+<command> --help                 # installed commands run through shims in bin\
+wbrew upgrade
+wbrew uninstall <package>; wbrew autoremove
+# 4. Reproduce a setup elsewhere
+wbrew bundle export --file dev.json            # also writes dev.lock.json
+wbrew bundle install --file dev.json --locked
+```
+
+Documentation: `docs/architecture.md`, `docs/cli-reference.md` (commands,
+exit codes, JSON), `docs/manifest-spec.md`, `docs/repository-trust-spec.md`,
+`docs/package-author-guide.md`, `docs/security-model.md`,
+`docs/threat-model.md`, `docs/recovery-troubleshooting.md`,
+`docs/known-limitations.md`, `docs/release-checklist.md`, ADRs in
+`docs/adr/` (index: `docs/adr/README.md`). PowerShell completion:
+`scripts/wbrew-completion.ps1`.
 
 ## File routing — what each session receives
 

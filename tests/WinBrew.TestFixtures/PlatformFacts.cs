@@ -79,3 +79,15 @@ public sealed class WindowsArtifactFactAttribute : FactAttribute
         }
     }
 }
+
+/// <summary>A fact that needs a release artifact named by an environment variable (any OS). Skipped — with the reason — when it is missing.</summary>
+public sealed class ArtifactFactAttribute : FactAttribute
+{
+    public ArtifactFactAttribute(string environmentVariable, string what)
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(environmentVariable)))
+        {
+            Skip = $"Set {environmentVariable} to {what} (the release workflow sets it after packaging).";
+        }
+    }
+}

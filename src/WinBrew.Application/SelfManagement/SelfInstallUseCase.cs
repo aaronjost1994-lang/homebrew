@@ -33,6 +33,13 @@ public sealed class SelfInstallUseCase(LifecycleServices s, MutationSession sess
     /// <summary>The release-zip set (scripts/publish-files.txt minus *.pdb, plus the AOT shim, A4/A14).</summary>
     public static readonly IReadOnlyList<string> RequiredFiles = ["wbrew.exe", "e_sqlite3.dll", LifecyclePaths.ShimTemplateFileName];
 
+    /// <summary>Shipped in the release zip and copied when present: the v1.1 elevated helper (A12). Only per-machine installer operations need it.</summary>
+    public static readonly IReadOnlyList<string> OptionalFiles = ["WinBrew.ElevatedHelper.exe"];
+
+    /// <summary>The files to copy from <paramref name="source"/>: every required file plus the optional ones that exist.</summary>
+    public static IEnumerable<string> FilesToCopy(Ports.IPackageFileSystem files, string source) =>
+        RequiredFiles.Concat(OptionalFiles.Where(f => files.FileExists(Path.Combine(source, f))));
+
     public async Task<SelfInstallResult> ExecuteAsync(SelfInstallRequest request, PathConsent consent, CancellationToken ct)
     {
         var source = Path.GetFullPath(s.Self.ExecutableDirectory);
@@ -154,7 +161,7 @@ public sealed class SelfInstallUseCase(LifecycleServices s, MutationSession sess
         }
 
         await s.Files.CreateDirectoryAsync(intent.TemporaryDirectory, ct);
-        foreach (var file in RequiredFiles)
+        foreach (var file in FilesToCopy(s.Files, source))
         {
             await s.Files.CopyFileAsync(Path.Combine(source, file), Path.Combine(intent.TemporaryDirectory, file), overwrite: true, ct);
         }

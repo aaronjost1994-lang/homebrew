@@ -260,7 +260,7 @@ public sealed class SelfUpdateUseCase(
         }
 
         await s.Files.CreateDirectoryAsync(intent.TemporaryDirectory, ct);
-        foreach (var file in SelfInstallUseCase.RequiredFiles)
+        foreach (var file in SelfInstallUseCase.FilesToCopy(s.Files, extract))
         {
             await s.Files.CopyFileAsync(Path.Combine(extract, file), Path.Combine(intent.TemporaryDirectory, file), overwrite: true, ct);
         }

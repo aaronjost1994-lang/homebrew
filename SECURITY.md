@@ -2,8 +2,8 @@
 
 WinBrew's security model (repository trust, artifact verification,
 archive defenses, the elevated helper) is documented in
-`docs/security-model.md` and `docs/threat-model.md` as those documents
-are produced during the implementation phases.
+`docs/security-model.md`, with the STRIDE analysis in
+`docs/threat-model.md`.
 
 ## Reporting a vulnerability
 
