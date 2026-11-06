@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using System.CommandLine;
+using System.Text;
 using WinBrew.Core;
 using WinBrew.Cli.Output;
 
@@ -9,6 +10,8 @@ internal static class Program
 {
     public static async Task<int> Main(string[] args)
     {
+        UseUtf8WhenRedirected();
+
         // Fast path (A4): --version is handled before the command tree, the
         // IHost, and Microsoft.Data.Sqlite are ever touched. --help is served
         // by the parser without any action running, so the lazy container is
@@ -69,6 +72,27 @@ internal static class Program
             {
                 await asyncDisposable.DisposeAsync().ConfigureAwait(false);
             }
+        }
+    }
+
+    /// <summary>
+    /// Redirected stdout/stderr (pipes, files, `--json` consumers) are always
+    /// UTF-8 without a BOM. On Windows .NET otherwise encodes them in the OEM
+    /// code page and mangles any non-ASCII text (package names, descriptions,
+    /// the "→" in cycle paths). An interactive console already writes UTF-16
+    /// and is left alone; the console code page is never changed.
+    /// </summary>
+    private static void UseUtf8WhenRedirected()
+    {
+        var utf8 = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+        if (Console.IsOutputRedirected)
+        {
+            Console.SetOut(new StreamWriter(Console.OpenStandardOutput(), utf8) { AutoFlush = true });
+        }
+
+        if (Console.IsErrorRedirected)
+        {
+            Console.SetError(new StreamWriter(Console.OpenStandardError(), utf8) { AutoFlush = true });
         }
     }
 

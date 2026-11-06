@@ -18,6 +18,9 @@
     <ProjectReference Include="..\WinBrew.LockHolderHelper\WinBrew.LockHolderHelper.csproj" />
     <!-- A11/A16: crash tests run the real CLI as a child process (FailFast). -->
     <ProjectReference Include="..\WinBrew.CliTestHost\WinBrew.CliTestHost.csproj" />
+    <!-- Phase E: per-machine installer tests launch the real elevated helper,
+         which the CLI expects next to itself (here: next to wbrew-testhost). -->
+    <ProjectReference Include="..\..\src\WinBrew.ElevatedHelper\WinBrew.ElevatedHelper.csproj" />
   </ItemGroup>
 
   <ItemGroup>

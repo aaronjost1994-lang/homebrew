@@ -396,6 +396,12 @@
           "NuGet.Versioning": "[7.9.0, )"
         }
       },
+      "winbrew.elevatedhelper": {
+        "type": "Project",
+        "dependencies": {
+          "WinBrew.Windows": "[1.0.0, )"
+        }
+      },
       "winbrew.infrastructure": {
         "type": "Project",
         "dependencies": {

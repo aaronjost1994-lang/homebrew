@@ -28,6 +28,22 @@ public sealed class InstallerWindowsTests
     private static string Sddl(string path) =>
         new DirectoryInfo(path).GetAccessControl(AccessControlSections.Owner | AccessControlSections.Access).GetSecurityDescriptorSddlForm(AccessControlSections.All);
 
+    /// <summary>
+    /// Owned by the current user AND granting them full control. An owner-only
+    /// descriptor has an empty DACL: the directory then denies everyone, so the
+    /// test could neither populate nor delete it.
+    /// </summary>
+    [SupportedOSPlatform("windows")]
+    private static DirectorySecurity UserOwnedSecurity()
+    {
+        var user = WindowsIdentity.GetCurrent().User!;
+        var security = new DirectorySecurity();
+        security.SetOwner(user);
+        security.AddAccessRule(new FileSystemAccessRule(user, FileSystemRights.FullControl,
+            InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit, PropagationFlags.None, AccessControlType.Allow));
+        return security;
+    }
+
     [SupportedOSPlatform("windows")]
     private static void AssertRefusedAndUntouched(string path, string because)
     {
@@ -43,9 +59,7 @@ public sealed class InstallerWindowsTests
     public void PreCreatedPlainDirectory_OwnedByTheUser_IsRefused()
     {
         var path = ScratchUnderProgramData();
-        var security = new DirectorySecurity();
-        security.SetOwner(WindowsIdentity.GetCurrent().User!);
-        new DirectoryInfo(path).Create(security);
+        new DirectoryInfo(path).Create(UserOwnedSecurity());
         try
         {
             AssertRefusedAndUntouched(path, "owner is a standard user");
@@ -81,9 +95,7 @@ public sealed class InstallerWindowsTests
     public void PreCreatedDirectoryContainingAHardLink_IsRefused_AndTheLinkTargetsAclIsUnchanged()
     {
         var path = ScratchUnderProgramData();
-        var security = new DirectorySecurity();
-        security.SetOwner(WindowsIdentity.GetCurrent().User!);
-        new DirectoryInfo(path).Create(security);
+        new DirectoryInfo(path).Create(UserOwnedSecurity());
         var outside = Path.Combine(Path.GetTempPath(), "wbrew-hardlink-target-" + Guid.NewGuid().ToString("N")[..8] + ".txt");
         File.WriteAllText(outside, "victim");
         var victimBefore = new FileInfo(outside).GetAccessControl().GetSecurityDescriptorSddlForm(AccessControlSections.All);

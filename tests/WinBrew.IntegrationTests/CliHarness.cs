@@ -74,6 +74,9 @@ public sealed class CliHarness : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             RedirectStandardInput = true,
+            // wbrew writes redirected streams as UTF-8 (Program.UseUtf8WhenRedirected).
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8,
             UseShellExecute = false,
             WorkingDirectory = Work, // core dumps from FailFast land here, never in the repo
         };
