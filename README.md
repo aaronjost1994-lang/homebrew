@@ -25,6 +25,66 @@ portable installs and the shim model), winget manifest schema (prior
 art), The Update Framework (trust model), PubGrub (dependency
 resolution), Cargo's sparse index (catalog model).
 
+## Architecture
+
+Dependencies point inward. The CLI is the composition root, and the
+Infrastructure and Windows adapters implement the Application's ports. Core is
+pure domain code with no I/O. Details: [docs/architecture.md](docs/architecture.md).
+
+```mermaid
+flowchart TB
+    user(["User / script"]) --> cli
+    subgraph exe["wbrew.exe (self-contained)"]
+        cli["<b>WinBrew.Cli</b><br/>command tree · JSON envelope · exit codes<br/>composition root (DI)"]
+        app["<b>WinBrew.Application</b><br/>use cases + ports<br/>plan executor · journal/recovery · trust refresh"]
+        core["<b>WinBrew.Core</b> (pure, no I/O)<br/>versions · manifests · PubGrub resolver<br/>TUF trust chain · bundles · installer rules"]
+        infra["<b>WinBrew.Infrastructure</b><br/>SQLite state + FTS5 catalog · HTTPS client<br/>safe ZIP extraction · cache · config · mutation lock"]
+        win["<b>WinBrew.Windows</b><br/>HKCU PATH · shim store · Restart Manager<br/>msiexec/EXE runner · elevation launcher"]
+        cli --> app --> core
+        cli -. registers .-> infra
+        cli -. registers .-> win
+        infra -- implements ports --> app
+        win -- implements ports --> app
+    end
+    shim["<b>wbrew-shim.exe</b><br/>Native AOT launcher<br/>bin\&lt;cmd&gt;.exe"]
+    helper["<b>WinBrew.ElevatedHelper.exe</b><br/>per-machine MSI/EXE (v1.1, UAC)"]
+    repo[("Signed repository<br/>root → timestamp → index")]
+    disk[("%LOCALAPPDATA%\WinBrew<br/>app · bin · packages · cache · state")]
+    infra -- HTTPS, verified --> repo
+    infra --> disk
+    win -- copies template --> shim
+    win -- typed request --> helper
+    shim -- runs --> pkg["installed package exe"]
+```
+
+What happens on `wbrew install <pkg>`:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant U as User
+    participant C as wbrew (Cli)
+    participant A as Application
+    participant R as Repository
+    participant S as State (SQLite)
+    U->>C: wbrew install pkg
+    C->>A: InstallUseCase
+    A->>S: take mutation lock, recover interrupted ops
+    A->>R: refresh if expired (root → timestamp → index, signatures checked)
+    A->>A: PubGrub resolve → plan
+    A-->>U: show plan, ask (or --yes)
+    A->>R: download artifacts (SHA-256 checked)
+    A->>A: safe extract → validate → place → shims
+    A->>S: one transaction commits packages, shims, edges
+    C-->>U: result (exit 0) / JSON envelope
+```
+
+## User manual
+
+Installation, first steps, everyday commands, bundles, installer packages,
+configuration, scripting and troubleshooting:
+**[docs/user-manual.md](docs/user-manual.md)**.
+
 ## Quick start (once a release exists)
 
 ```powershell
@@ -44,7 +104,7 @@ wbrew bundle export --file dev.json            # also writes dev.lock.json
 wbrew bundle install --file dev.json --locked
 ```
 
-Documentation: `docs/architecture.md`, `docs/cli-reference.md` (commands,
+Documentation: `docs/user-manual.md` (install + usage), `docs/architecture.md`, `docs/cli-reference.md` (commands,
 exit codes, JSON), `docs/manifest-spec.md`, `docs/repository-trust-spec.md`,
 `docs/package-author-guide.md`, `docs/security-model.md`,
 `docs/threat-model.md`, `docs/recovery-troubleshooting.md`,
