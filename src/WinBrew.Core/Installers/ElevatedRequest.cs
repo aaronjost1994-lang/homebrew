@@ -23,7 +23,10 @@ public sealed record ElevatedRequest(
     ExeCommand? ExeUninstall = null);
 
 /// <summary>The helper's typed result: installer exit code, log path, detected ProductCode.</summary>
-public sealed record ElevatedResult(string SchemaVersion, int? ExitCode, string? LogPath, string? ProductCode, string? Error);
+// Optional members need defaults: the context omits nulls on write
+// (WhenWritingNull) and RespectRequiredConstructorParameters makes every
+// parameter WITHOUT a default required on read.
+public sealed record ElevatedResult(string SchemaVersion, int? ExitCode = null, string? LogPath = null, string? ProductCode = null, string? Error = null);
 
 /// <summary>Stores an installer declaration with the installed record (uninstall never depends on the catalog).</summary>
 public static class InstallerDeclarationJson

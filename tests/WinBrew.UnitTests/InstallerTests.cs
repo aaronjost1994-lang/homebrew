@@ -110,6 +110,21 @@ public sealed class MsiRulesTests
         Assert.Matches(ElevatedProtocol.RequestFileNameRegex(), $"request-{Guid.NewGuid():N}.json");
         Assert.DoesNotMatch(ElevatedProtocol.RequestFileNameRegex(), "request-../../x.json");
     }
+
+    public static TheoryData<ElevatedResult> Results() => new()
+    {
+        new ElevatedResult("1", 0, "C:\\log.txt", "{6F1C2D3E-4A5B-4C6D-8E7F-90A1B2C3D4E5}", null), // MSI success: no error
+        new ElevatedResult("1", 0, "C:\\log.txt", null, null),                                   // EXE success: no product code either
+        new ElevatedResult("1", null, null, null, "refused: never adopts or repairs"),         // refusal: only the error
+    };
+
+    [Theory]
+    [MemberData(nameof(Results))]
+    public void ElevatedResult_RoundTrips_WithNullMembersOmitted(ElevatedResult result)
+    {
+        // The helper omits null members on write; the CLI must still read them.
+        Assert.Equal(result, ElevatedProtocol.ParseResult(ElevatedProtocol.Serialize(result)));
+    }
 }
 
 /// <summary>A12: owner + DACL rules for pre-existing %ProgramData%\WinBrew directories.</summary>
