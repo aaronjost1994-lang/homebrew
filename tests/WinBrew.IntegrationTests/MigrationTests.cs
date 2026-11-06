@@ -29,18 +29,19 @@ public sealed class MigrationTests : IDisposable
     }
 
     [Fact]
-    public async Task EmptyToV1_Migrates_AndCreatesBackup() // phase-a acceptance
+    public async Task EmptyToLatest_Migrates_AndCreatesABackupBeforeEachStep() // phase-a acceptance (+ v2, Phase D)
     {
         var db = new SqliteStateDatabase(DbPath, BackupDir);
 
         Assert.Equal(-1, await db.GetCurrentSchemaVersionAsync(CancellationToken.None)); // no file yet
         await db.ApplyMigrationsAsync(CancellationToken.None);
 
-        Assert.Equal(1, await db.GetCurrentSchemaVersionAsync(CancellationToken.None));
+        Assert.Equal(Migrations.LatestVersion, await db.GetCurrentSchemaVersionAsync(CancellationToken.None));
 
-        var backups = Directory.GetFiles(BackupDir);
-        Assert.Single(backups);
+        var backups = Directory.GetFiles(BackupDir).Order(StringComparer.Ordinal).ToArray();
+        Assert.Equal(Migrations.LatestVersion, backups.Length);
         Assert.Contains("pre-v1", Path.GetFileName(backups[0]));
+        Assert.Contains("pre-v2", Path.GetFileName(backups[1]));
 
         // The backup is a real SQLite copy of the PRE-migration state
         // (A6: backup before every migration — for empty→v1 that state is
@@ -66,6 +67,7 @@ public sealed class MigrationTests : IDisposable
             "repositories", "role_versions", "catalog_packages", "catalog_versions",
             "catalog_architectures", "catalog_dependencies", "installed_packages",
             "dependency_edges", "pins", "shims", "operations", "operation_steps", "journal_files",
+            "repository_trust", "self_update_trust", "catalog_search", // v2 (Phase D)
         };
 
         using var command = connection.CreateCommand();
@@ -84,16 +86,45 @@ public sealed class MigrationTests : IDisposable
     }
 
     [Fact]
+    public async Task V1ToV2_BuildsTheFts5SearchIndex_FromExistingCatalogRows() // ADR-0005, D6
+    {
+        // A v1 database with one catalog row (as Phase B/C wrote it).
+        Directory.CreateDirectory(BackupDir);
+        await using (var v1 = new SqliteConnection($"Data Source={DbPath}"))
+        {
+            await v1.OpenAsync();
+            using var ddl = v1.CreateCommand();
+            ddl.CommandText = Migrations.All.Single(m => m.Version == 1).Ddl + """
+                INSERT INTO repositories(name, url, created_at) VALUES ('local', 'https://example.org', '2026-01-01T00:00:00Z');
+                INSERT INTO catalog_packages(repo, id, display_name, description, search_text)
+                  VALUES ('local', 'ripgrep', 'ripgrep', 'Line-oriented search', 'ripgrep ripgrep line-oriented search');
+                PRAGMA user_version = 1;
+                """;
+            ddl.ExecuteNonQuery();
+        }
+
+        SqliteConnection.ClearAllPools();
+        var db = new SqliteStateDatabase(DbPath, BackupDir);
+        await db.ApplyMigrationsAsync(CancellationToken.None);
+        Assert.Equal(2, await db.GetCurrentSchemaVersionAsync(CancellationToken.None));
+
+        var store = new SqliteStateStore(DbPath, TimeProvider.System);
+        Assert.Equal("ripgrep", Assert.Single(await store.SearchAsync("oriented", CancellationToken.None)).Id); // trigram path
+        Assert.Equal("ripgrep", Assert.Single(await store.SearchAsync("gr", CancellationToken.None)).Id);       // short-query path
+        Assert.Empty(await store.SearchAsync("zzz", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Migrations_AreIdempotent_SecondRunNoNewBackup()
     {
         var db = new SqliteStateDatabase(DbPath, BackupDir);
         await db.ApplyMigrationsAsync(CancellationToken.None);
         var backupsAfterFirst = Directory.GetFiles(BackupDir).Length;
 
-        await db.ApplyMigrationsAsync(CancellationToken.None); // nothing to do at v1
+        await db.ApplyMigrationsAsync(CancellationToken.None); // nothing to do at the latest version
 
         Assert.Equal(backupsAfterFirst, Directory.GetFiles(BackupDir).Length);
-        Assert.Equal(1, await db.GetCurrentSchemaVersionAsync(CancellationToken.None));
+        Assert.Equal(Migrations.LatestVersion, await db.GetCurrentSchemaVersionAsync(CancellationToken.None));
     }
 
     [Fact]

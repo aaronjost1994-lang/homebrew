@@ -16,11 +16,12 @@ public sealed record OutdatedResult(IReadOnlyList<OutdatedRow> Packages, [proper
 /// stable version with an artifact for this host (A10, D2 rule 6). Read-only:
 /// no lock, never a refresh (A8).
 /// </summary>
-public sealed class OutdatedUseCase(LifecycleServices s)
+public sealed class OutdatedUseCase(LifecycleServices s, Catalog.MetadataFreshness freshness)
 {
     public async Task<OutdatedResult> ExecuteAsync(CancellationToken ct)
     {
         var warnings = await ReadOnlyWarnings.CollectAsync(s.Journal, ct);
+        warnings.AddRange(await freshness.ForReadOnlyAsync(ct));
         var pins = await s.Installed.GetPinsAsync(ct);
         var host = LifecyclePaths.HostArchitecture(s.Probe);
         var rows = new List<OutdatedRow>();

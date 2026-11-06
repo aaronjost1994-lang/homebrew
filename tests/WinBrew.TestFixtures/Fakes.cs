@@ -114,6 +114,8 @@ public sealed class FakeStateDatabase(int currentVersion = -1, int maxVersion = 
     }
 
     public Task<bool> SupportsFts5Async(CancellationToken ct) => Task.FromResult(Fts5);
+
+    public Task DeleteDatabaseAsync(CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>

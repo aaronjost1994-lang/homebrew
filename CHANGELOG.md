@@ -6,6 +6,27 @@ semantics; versions are `NuGetVersion`-normalized (D3).
 
 ## [Unreleased]
 
+### Added (Phase D — complete, 2026-11-06)
+- Simplified-TUF repository trust (D6): ECDSA P-256 envelopes over exact
+  payload bytes, SPKI rules checked before import, thresholds, root rotation
+  N→N+1 (cross-signed), timestamp/index binding, replay/rollback/freeze
+  protection, expiry with clock skew, maximum lifetimes.
+- `repo add` (fingerprint approval; `--trust-root`, exit 10 without it when
+  non-interactive), `repo list`, `repo remove`, `update`, `search` (FTS5
+  trigram index, schema migration v2).
+- Expired metadata: read-only commands warn, `--dry-run` refuses, online
+  installs refresh automatically, `--offline` warns with its age (A8/A15).
+- `bundle export`, `bundle install [--locked]` with lockfiles (exact
+  versions, architectures, repository identity, manifest and artifact
+  digests); offline locked restore from the verified cache.
+- `self update` from a signed release feed (same trust model; exits 3 when
+  no feed is configured in the build) and `self uninstall [--keep-data]`.
+- `scripts/new-fixture-repo.ps1` and the `RepositorySigner` test fixture.
+
+### Removed
+- The unsigned Phase B ingest path (`test-ingest`, `TestHooksUnsignedVerifier`):
+  every build accepts only signed metadata.
+
 ### Added (Phase C — complete, 2026-11-06)
 - PubGrub dependency resolver (pure, deterministic, explanations naming
   repository-qualified ids and original ranges; cycles refused with their

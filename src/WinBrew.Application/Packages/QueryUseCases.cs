@@ -70,13 +70,14 @@ public sealed class ListUseCase(IInstalledStore installed, IOperationJournal jou
 /// state, and the writesToInstallDir warning when the verified manifest is
 /// cached (A3/A9). Read-only.
 /// </summary>
-public sealed class InfoUseCase(LifecycleServices s)
+public sealed class InfoUseCase(LifecycleServices s, Catalog.MetadataFreshness freshness)
 {
-    public async Task<InfoResult> ExecuteAsync(string package, CancellationToken ct)
+    public async Task<InfoResult> ExecuteAsync(string package, bool offline, CancellationToken ct)
     {
         var request = PackageLookup.Parse(package, versionOption: null);
-        var catalogPackage = await PackageLookup.FindAsync(s.Catalog, request, ct);
         var warnings = await ReadOnlyWarnings.CollectAsync(s.Journal, ct);
+        warnings.AddRange(await freshness.ForReadOnlyAsync(ct));
+        var catalogPackage = await PackageLookup.FindAsync(s.Catalog, request, ct);
         var host = LifecyclePaths.HostArchitecture(s.Probe);
 
         var versions = catalogPackage.Versions
@@ -107,8 +108,14 @@ public sealed class InfoUseCase(LifecycleServices s)
             var entry = catalogPackage.Versions.FirstOrDefault(v => v.Version == manifestVersion);
             var bytes = await s.Files.ReadFileAsync(
                 LifecyclePaths.CachedManifest(s.Layout, catalogPackage.Repo, catalogPackage.Id, manifestVersion), ct);
-            if (entry is not null && bytes is not null &&
-                Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes)) == entry.ManifestSha256)
+            if (entry is not null && (bytes is null || Sha256Hex(bytes) != entry.ManifestSha256))
+            {
+                // A9: the writesToInstallDir warning needs the manifest. Read-only: it is
+                // fetched into memory, bound by the signed index digest, never cached.
+                bytes = offline ? null : await FetchManifestAsync(catalogPackage.Repo, catalogPackage.Id, entry, ct);
+            }
+
+            if (entry is not null && bytes is not null && Sha256Hex(bytes) == entry.ManifestSha256)
             {
                 try
                 {
@@ -129,6 +136,29 @@ public sealed class InfoUseCase(LifecycleServices s)
 
         return new InfoResult(Identifiers.Qualified(catalogPackage.Repo, catalogPackage.Id), catalogPackage.DisplayName,
             catalogPackage.Description, latest, versions, installedRow, writesToInstallDir, warnings);
+    }
+
+    private static string Sha256Hex(byte[] bytes) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes));
+
+    private async Task<byte[]?> FetchManifestAsync(string repo, string id, CatalogVersion entry, CancellationToken ct)
+    {
+        var repository = await s.Catalog.GetRepositoryAsync(repo, ct);
+        if (repository is null)
+        {
+            return null;
+        }
+
+        var settings = await LifecycleSettings.LoadAsync(s.Config, s.Flags, ct);
+        var url = new Uri(new Uri(repository.Url.TrimEnd('/') + "/"), $"manifests/{id}/{entry.Version}.json");
+        var (body, result) = await s.Http.GetBytesAsync(new FetchRequest(url, entry.ManifestSize, settings.MaxMetadataBytes,
+            settings.DownloadTimeout, settings.DownloadRetries, settings.Localhost), ct);
+        if (result.Sha256 != entry.ManifestSha256)
+        {
+            throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
+                $"Manifest digest mismatch for {repo}/{id}@{entry.Version}: index.json says {entry.ManifestSha256}, received {result.Sha256} (D6).");
+        }
+
+        return body;
     }
 }
 

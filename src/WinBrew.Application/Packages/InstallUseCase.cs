@@ -1,3 +1,4 @@
+using WinBrew.Application.Catalog;
 using WinBrew.Application.Lifecycle;
 using WinBrew.Core;
 using WinBrew.Core.Resolution;
@@ -23,7 +24,7 @@ public sealed record PlanResult(
 /// already-installed packages stay installed and satisfied; the plan lists
 /// every package (install / upgrade / keep) in dependency order.
 /// </summary>
-public sealed class InstallUseCase(LifecycleServices s, MutationSession session, ResolutionPlanner planner, PlanExecutor executor)
+public sealed class InstallUseCase(LifecycleServices s, MutationSession session, ResolutionPlanner planner, PlanExecutor executor, MetadataFreshness freshness)
 {
     public async Task<PlanResult> ExecuteAsync(InstallRequest request, PlanApproval approve, CancellationToken ct)
     {
@@ -33,12 +34,14 @@ public sealed class InstallUseCase(LifecycleServices s, MutationSession session,
         {
             // --dry-run: the full plan from the EXISTING catalog; no lock, no downloads,
             // no state writes, no shims, never a metadata refresh (A8).
+            await freshness.EnsureForDryRunAsync(ct);
             var dry = await PlanAsync(parsed, ct);
             return new PlanResult(dry, false, true, [], dry.Warnings, []);
         }
 
         using var scope = await session.BeginAsync("install", ct);
-        var plan = await PlanAsync(parsed, ct);
+        var refreshed = await freshness.EnsureForMutationAsync(scope, request.Offline, ct);
+        var plan = PlanRunner.WithNotes(await PlanAsync(parsed, ct), refreshed);
         return await PlanRunner.RunAsync(plan, scope, approve, executor, request.Offline, ct);
     }
 
@@ -72,18 +75,20 @@ public sealed class InstallUseCase(LifecycleServices s, MutationSession session,
 /// with architecture re-selection (A10). Upgrades are compensated as a whole
 /// until StateCommitted: previous versions stay usable on any failure (A11).
 /// </summary>
-public sealed class UpgradeUseCase(LifecycleServices s, MutationSession session, ResolutionPlanner planner, PlanExecutor executor)
+public sealed class UpgradeUseCase(LifecycleServices s, MutationSession session, ResolutionPlanner planner, PlanExecutor executor, MetadataFreshness freshness)
 {
     public async Task<PlanResult> ExecuteAsync(UpgradeRequest request, PlanApproval approve, CancellationToken ct)
     {
         if (request.DryRun)
         {
+            await freshness.EnsureForDryRunAsync(ct);
             var dry = await PlanAsync(request.Package, ct);
             return new PlanResult(dry, false, true, [], dry.Warnings, []);
         }
 
         using var scope = await session.BeginAsync("upgrade", ct);
-        var plan = await PlanAsync(request.Package, ct);
+        var refreshed = await freshness.EnsureForMutationAsync(scope, request.Offline, ct);
+        var plan = PlanRunner.WithNotes(await PlanAsync(request.Package, ct), refreshed);
         return await PlanRunner.RunAsync(plan, scope, approve, executor, request.Offline, ct);
     }
 
@@ -110,6 +115,10 @@ public sealed class UpgradeUseCase(LifecycleServices s, MutationSession session,
 /// <summary>Shared tail of install/upgrade: approval, nothing-to-do, execution.</summary>
 internal static class PlanRunner
 {
+    /// <summary>Puts metadata-refresh / offline-age notes at the top of the plan's warnings (A8: the plan says so).</summary>
+    public static OperationPlan WithNotes(OperationPlan plan, IReadOnlyList<string> notes) =>
+        notes.Count == 0 ? plan : plan with { Warnings = [.. notes, .. plan.Warnings] };
+
     public static async Task<PlanResult> RunAsync(
         OperationPlan plan, MutationScope scope, PlanApproval approve, PlanExecutor executor, bool offline, CancellationToken ct)
     {

@@ -21,7 +21,8 @@ public sealed record LifecycleSettings(
     ArchiveLimits ArchiveLimits,
     InsecureLocalhostPolicy Localhost,
     bool PathManaged,
-    bool InteractiveNever)
+    bool InteractiveNever,
+    TimeSpan MaxClockSkew)
 {
     public static async Task<LifecycleSettings> LoadAsync(IConfigStore store, RuntimeFlags flags, CancellationToken ct)
     {
@@ -53,6 +54,7 @@ public sealed record LifecycleSettings(
                 flags.TestHooksBuild && Get<bool>("testing.allowInsecureLocalhost"),
                 flags.TestModeEnvironment),
             PathManaged: Get<bool>("path.managed"),
-            InteractiveNever: string.Equals(Get<string>("interactive"), "never", StringComparison.Ordinal));
+            InteractiveNever: string.Equals(Get<string>("interactive"), "never", StringComparison.Ordinal),
+            MaxClockSkew: TimeSpan.FromSeconds(Get<int>("trust.maxClockSkewSeconds")));
     }
 }

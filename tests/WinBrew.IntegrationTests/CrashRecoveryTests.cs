@@ -25,8 +25,8 @@ public sealed class CrashRecoveryTests
         /// <summary>Install crashes at package.activated, then recover itself crashes at the checkpoint.</summary>
         CrashDuringRecovery,
 
-        /// <summary>The checkpoint fires during test-ingest.</summary>
-        Ingest,
+        /// <summary>The checkpoint fires during a signed <c>wbrew update</c> that brings index v2 (D6).</summary>
+        Update,
 
         /// <summary>wbrew self install (zip layout).</summary>
         SelfInstall,
@@ -39,23 +39,26 @@ public sealed class CrashRecoveryTests
 
         /// <summary>Phase C: app 1.0.0 + lib 1.5.0 → app 2.0.0 + lib 2.0.0 in ONE operation (new template too).</summary>
         MultiPackageUpgrade,
+
+        /// <summary>Phase D: wbrew self update from the signed fixture feed (bulk shim switch, A14).</summary>
+        SelfUpdate,
     }
 
     /// <summary>Every registered checkpoint → the scenarios that must fire it. Asserted to cover the registry exactly.</summary>
     public static readonly IReadOnlyDictionary<string, Scenario[]> Coverage = new Dictionary<string, Scenario[]>(StringComparer.Ordinal)
     {
-        [FaultCheckpoints.DownloadStarted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
-        [FaultCheckpoints.DownloadCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
-        [FaultCheckpoints.ArtifactVerified] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.DownloadStarted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
+        [FaultCheckpoints.DownloadCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
+        [FaultCheckpoints.ArtifactVerified] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
         [FaultCheckpoints.ArtifactCached] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
-        [FaultCheckpoints.ExtractCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ExtractCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
         [FaultCheckpoints.ValidateCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
         [FaultCheckpoints.PackagePlaced] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
-        [FaultCheckpoints.ShimSidecarReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
-        [FaultCheckpoints.ShimBinaryReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.ShimSidecarReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
+        [FaultCheckpoints.ShimBinaryReplaced] = [Scenario.Install, Scenario.Upgrade, Scenario.SelfInstall, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
         [FaultCheckpoints.PackageActivated] = [Scenario.Install, Scenario.Upgrade, Scenario.MultiPackageUpgrade],
-        [FaultCheckpoints.StateCommitted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
-        [FaultCheckpoints.OperationCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall, Scenario.MultiPackageUpgrade],
+        [FaultCheckpoints.StateCommitted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
+        [FaultCheckpoints.OperationCompleted] = [Scenario.Install, Scenario.Upgrade, Scenario.Uninstall, Scenario.SelfInstall, Scenario.MultiPackageUpgrade, Scenario.SelfUpdate],
         [FaultCheckpoints.CompensateStarted] = [Scenario.CrashDuringRecovery],
         [FaultCheckpoints.CompensateShimReverted] = [Scenario.CrashDuringRecovery],
         [FaultCheckpoints.CompensatePackageRemoved] = [Scenario.CrashDuringRecovery],
@@ -64,7 +67,9 @@ public sealed class CrashRecoveryTests
         [FaultCheckpoints.UninstallShimRemoved] = [Scenario.Uninstall],
         [FaultCheckpoints.UninstallPackageRemoved] = [Scenario.Uninstall],
         [FaultCheckpoints.PathUpdated] = [Scenario.SelfInstallModifyPath],
-        [FaultCheckpoints.CatalogIngested] = [Scenario.Ingest],
+        [FaultCheckpoints.CatalogIngested] = [Scenario.Update],
+        [FaultCheckpoints.CatalogRowsWritten] = [Scenario.Update],
+        [FaultCheckpoints.SelfUpdateAppCopied] = [Scenario.SelfUpdate],
         [FaultCheckpoints.SelfInstallAppCopied] = [Scenario.SelfInstall],
     };
 
@@ -125,12 +130,8 @@ public sealed class CrashRecoveryTests
                 h.AssertConsistent([null]);
                 break;
 
-            case Scenario.Ingest:
-                AssertCrashed(h.RunFault(checkpoint, "test-ingest", CliHarness.RepoName, h.Server.BaseUrl.ToString()), checkpoint);
-                CliHarness.Expect(0, h.Run("recover"));
-                // The ingest transaction committed before the checkpoint: the catalog is usable.
-                CliHarness.Expect(0, h.Run("info", "hello"));
-                h.AssertConsistent([null]);
+            case Scenario.Update:
+                AssertUpdateIsAtomic(h, checkpoint);
                 break;
 
             case Scenario.SelfInstall:
@@ -153,6 +154,10 @@ public sealed class CrashRecoveryTests
 
             case Scenario.MultiPackageUpgrade:
                 AssertMultiUpgradeRecovers(checkpoint);
+                break;
+
+            case Scenario.SelfUpdate:
+                AssertSelfUpdateRecovers(h, checkpoint);
                 break;
 
             default:
@@ -205,6 +210,53 @@ public sealed class CrashRecoveryTests
 
         Assert.Empty(h.OldFiles());
         Assert.Empty(h.StagingLeftovers());
+    }
+
+    /// <summary>
+    /// Phase D acceptance: catalog rows and role high-water marks are written in ONE
+    /// transaction. A crash INSIDE it (catalog.rows.written) leaves the previous catalog
+    /// AND the previous marks; a crash after COMMIT (catalog.ingested) leaves both new.
+    /// </summary>
+    private static void AssertUpdateIsAtomic(CliHarness h, string checkpoint)
+    {
+        h.Repository.Add(new FixturePackage("extra", "1.0.0", [("bin/extra.exe", PeBytes.Create())], [("extra", "bin/extra.exe")]));
+        h.Repository.IndexVersion = 2;
+        h.Repository.Publish();
+
+        AssertCrashed(h.RunFault(checkpoint, "update"), checkpoint);
+        CliHarness.Expect(0, h.Run("recover"));
+
+        var committed = checkpoint == FaultCheckpoints.CatalogIngested;
+        var repo = Assert.Single(CliHarness.Expect(0, h.Run("repo", "list", "--json")).Json()
+            .GetProperty("data").GetProperty("repositories").EnumerateArray());
+        Assert.Equal(committed ? 2 : 1, repo.GetProperty("indexVersion").GetInt32());
+        Assert.Equal(committed ? 2 : 1, repo.GetProperty("timestampVersion").GetInt32());
+        CliHarness.Expect(committed ? 0 : 3, h.Run("info", "extra", "--offline"));
+
+        // Either way the next update completes normally.
+        CliHarness.Expect(0, h.Run("update"));
+        CliHarness.Expect(0, h.Run("info", "extra", "--offline"));
+        h.AssertConsistent([null]);
+    }
+
+    /// <summary>A14 + A11: a crash anywhere in self update ends with EITHER the old or the new version active — never a mix.</summary>
+    private static void AssertSelfUpdateRecovers(CliHarness h, string checkpoint)
+    {
+        CliHarness.Expect(0, h.Run("install", "hello@2.0.0", "--yes"));
+        var feed = new ReleaseFeed(h).Publish();
+        AssertCrashed(feed.RunFault(checkpoint, "self", "update", "--yes"), checkpoint);
+        CliHarness.Expect(0, feed.Run("recover"));
+
+        var updated = feed.ActiveTarget().Contains(ReleaseFeed.NewVersion, StringComparison.Ordinal);
+        var app = Path.Combine(h.Root, "app", ReleaseFeed.NewVersion);
+        Assert.Equal(updated, Directory.Exists(app));
+        Assert.True(File.Exists(Path.Combine(updated ? app : Path.Combine(h.Root, "app", "0.0.0-test"), "wbrew-shim.exe")));
+        Assert.DoesNotContain(Directory.GetDirectories(Path.Combine(h.Root, "app")), d => Path.GetFileName(d).StartsWith('.'));
+        h.AssertConsistent("2.0.0");
+
+        // A further self update finishes the job (or reports up to date).
+        CliHarness.Expect(0, feed.Run("self", "update", "--yes"));
+        Assert.Contains(ReleaseFeed.NewVersion, feed.ActiveTarget(), StringComparison.Ordinal);
     }
 
     private static void AssertCrashed(CliRun run, string checkpoint) =>

@@ -7,10 +7,10 @@ namespace WinBrew.Core.Operations;
 /// additions are backward-compatible (PLAN §6).
 ///
 /// Phase B registers every durable transition of the portable lifecycle,
-/// uninstall, self install, PATH and catalog ingest. Names that belong to
-/// later phases (trust.root.accepted, selfupdate.app.copied — Phase D) are
-/// registered only when a phase actually fires them, so "crash at every
-/// registered checkpoint" stays executable in every phase.
+/// uninstall, self install, PATH and catalog ingest; Phase D adds the
+/// mid-transaction catalog checkpoint and self update. Names are registered
+/// only when a phase actually fires them, so "crash at every registered
+/// checkpoint" stays executable in every phase.
 /// Per-shim checkpoints fire once per shim (occurrence syntax
 /// WINBREW_FAULT_AT=&lt;name&gt;#N, PLAN §1).
 /// </summary>
@@ -46,6 +46,11 @@ public static class FaultCheckpoints
     public const string CatalogIngested = "catalog.ingested";
     public const string SelfInstallAppCopied = "selfinstall.app.copied";
 
+    // ---- Phase D: trusted metadata, self update ---------------------------
+    /// <summary>Fires INSIDE the catalog transaction after every row is written, before COMMIT (D6 atomicity).</summary>
+    public const string CatalogRowsWritten = "catalog.rows.written";
+    public const string SelfUpdateAppCopied = "selfupdate.app.copied";
+
     /// <summary>All registered checkpoint names, sorted. Tests enumerate this list.</summary>
     public static IReadOnlyList<string> All { get; } = new[]
     {
@@ -55,6 +60,7 @@ public static class FaultCheckpoints
         CompensateStarted, CompensateShimReverted, CompensatePackageRemoved,
         RollbackCompleted, RecoveryFailed, UninstallShimRemoved,
         UninstallPackageRemoved, PathUpdated, CatalogIngested, SelfInstallAppCopied,
+        CatalogRowsWritten, SelfUpdateAppCopied,
     }.OrderBy(n => n, StringComparer.Ordinal).ToArray();
 
     /// <summary>Throws when a phase tries to fire an unregistered name — keeps the registry authoritative.</summary>

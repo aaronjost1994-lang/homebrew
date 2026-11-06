@@ -3,7 +3,6 @@ using System.CommandLine;
 using WinBrew.Application.Configuration;
 using WinBrew.Application.Doctor;
 using WinBrew.Application.Ports;
-using WinBrew.Core;
 using WinBrew.Core.Config;
 using WinBrew.Cli.Output;
 
@@ -11,8 +10,8 @@ namespace WinBrew.Cli;
 
 /// <summary>
 /// The System.CommandLine 2.0 stable command tree for every A8 command.
-/// Commands outside Phases A–C return a documented NotAvailableInThisBuild
-/// error through the normal error path (exit 1) — phase-a.md.
+/// Every v1.0 command is implemented (Phases A–D); v1.1 installer features
+/// (Phase E) report NotAvailableInThisBuild from their use cases (exit 1).
 /// Handlers only parse input, call one use case and render (A5).
 /// </summary>
 internal static class CommandTree
@@ -26,8 +25,10 @@ internal static class CommandTree
 
         BuildConfig(root, services);
         BuildDoctor(root, services);
-        var self = BuildNotAvailableCommands(root);
+        var self = new Command("self", "Manage the WinBrew installation itself (A14).");
+        root.Subcommands.Add(self);
         PackageCommands.Build(root, self, services);
+        TrustCommands.Build(root, self, services);
 
         return root;
     }
@@ -192,55 +193,5 @@ internal static class CommandTree
         Console.Out.WriteLine(report.Healthy
             ? "doctor: no failures."
             : "doctor: FAILURES present — see above (exit 1).");
-    }
-
-    // ---- not-available commands (outside Phases A–C) ------------------------
-
-    private static Command BuildNotAvailableCommands(RootCommand root)
-    {
-        // Each maps to the phase that delivers it, per the phase map (README/PLAN §7).
-        root.Subcommands.Add(NotAvailable("search", "Search the catalog", "Phase D (catalog)"));
-        root.Subcommands.Add(NotAvailable("update", "Refresh repository metadata", "Phase D (trust)"));
-
-        var repo = new Command("repo", "Manage configured repositories (D6).");
-        repo.Subcommands.Add(NotAvailable("add", "Add a repository", "Phase D (trust bootstrap)"));
-        repo.Subcommands.Add(NotAvailable("list", "List configured repositories", "Phase D"));
-        repo.Subcommands.Add(NotAvailable("remove", "Remove a repository", "Phase D"));
-        root.Subcommands.Add(repo);
-
-        var bundle = new Command("bundle", "Export and install package bundles (A15).");
-        bundle.Subcommands.Add(NotAvailable("export", "Export a bundle", "Phase D"));
-        bundle.Subcommands.Add(NotAvailable("install", "Install a bundle", "Phase D"));
-        root.Subcommands.Add(bundle);
-
-        var self = new Command("self", "Manage the WinBrew installation itself (A14).");
-        self.Subcommands.Add(NotAvailable("update", "Self-update from the signed release feed", "Phase D (A14)"));
-        self.Subcommands.Add(NotAvailable("uninstall", "Remove WinBrew", "Phase D (A14)"));
-        root.Subcommands.Add(self);
-        return self;
-    }
-
-    /// <summary>
-    /// A command outside this phase's scope: documents itself, then fails
-    /// through the NORMAL error path with exit 1 (phase-a.md). It never
-    /// silently succeeds and never pretends to run.
-    /// </summary>
-    private static Command NotAvailable(string name, string description, string phase)
-    {
-        var command = new Command(name, $"{description} [not available in this build — planned for {phase}]");
-        command.SetAction((parseResult, ct) =>
-        {
-            var json = parseResult.GetValue(GlobalOptions.Json);
-            return CommandRunner.RunAsync(name, json, _ => throw new WinBrewException(
-                WinBrewErrorCode.GeneralFailure,
-                $"'wbrew {name}' is not available in this build (NotAvailableInThisBuild; planned for {phase}).",
-                new Dictionary<string, object?>
-                {
-                    ["reason"] = "NotAvailableInThisBuild",
-                    ["command"] = name,
-                    ["phase"] = phase,
-                }), ct);
-        });
-        return command;
     }
 }

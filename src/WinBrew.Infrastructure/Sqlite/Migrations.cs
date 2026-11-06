@@ -10,7 +10,7 @@ public sealed record Migration(int Version, string Description, string Ddl);
 /// </summary>
 public static class Migrations
 {
-    public const int LatestVersion = 1;
+    public const int LatestVersion = 2;
 
     public static readonly IReadOnlyList<Migration> All =
     [
@@ -175,6 +175,38 @@ public static class Migrations
             );
             CREATE INDEX idx_files_pending ON journal_files(path)
               WHERE deleted_at IS NULL;
+            """),
+        new(2, "trust state, self-update trust, FTS5 search index", """
+            -- D6: the accepted root (exact envelope bytes) and expiries per
+            -- repository; role high-water marks stay in role_versions (v1)
+            CREATE TABLE repository_trust (
+              repo        TEXT PRIMARY KEY REFERENCES repositories(name) ON DELETE CASCADE,
+              root_envelope BLOB NOT NULL,
+              root_fingerprints TEXT NOT NULL,      -- sorted root-role key IDs, comma-separated
+              timestamp_expires TEXT NOT NULL,      -- ISO-8601 UTC
+              index_expires TEXT NOT NULL,
+              verified_at TEXT NOT NULL             -- last full verification (offline age, A15)
+            );
+
+            -- A14: the self-update feed uses the same root chain and marks
+            CREATE TABLE self_update_trust (
+              scope       TEXT PRIMARY KEY CHECK (scope = 'self'),
+              root_envelope BLOB NOT NULL,
+              root_version INTEGER NOT NULL,
+              timestamp_version INTEGER NOT NULL,
+              index_version INTEGER NOT NULL,
+              verified_at TEXT NOT NULL
+            );
+
+            -- D6 search (ADR-0005): FTS5 trigram index over the SAME search_text
+            -- (lowercased with ToLowerInvariant at ingest). case_sensitive 1:
+            -- case folding is never delegated to SQLite.
+            CREATE VIRTUAL TABLE catalog_search USING fts5(
+              search_text, repo UNINDEXED, id UNINDEXED,
+              tokenize = 'trigram case_sensitive 1'
+            );
+            INSERT INTO catalog_search(search_text, repo, id)
+              SELECT search_text, repo, id FROM catalog_packages;
             """),
     ];
 }

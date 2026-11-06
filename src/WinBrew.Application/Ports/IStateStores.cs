@@ -1,5 +1,6 @@
 using WinBrew.Core.Catalog;
 using WinBrew.Core.Operations;
+using WinBrew.Core.Trust;
 
 namespace WinBrew.Application.Ports;
 
@@ -26,38 +27,88 @@ public sealed record CatalogPackage(
     IReadOnlyList<CatalogVersion> Versions);
 
 /// <summary>
-/// The SQLite catalog (D6): the ONLY input for planning. Ingest writes the
-/// catalog rows and the accepted index version (high-water mark) in ONE
-/// transaction; a lower version than the accepted one is a rollback attack
-/// and is rejected (VerificationFailure, exit 5).
+/// The verified trust state of a repository (D6): the accepted root envelope,
+/// role high-water marks and expiries, and when it was last verified.
+/// Everything here was fully verified while valid.
+/// </summary>
+public sealed record RepositoryTrustState(
+    string Repo,
+    string Url,
+    byte[] RootEnvelope,
+    IReadOnlyList<string> RootFingerprints,
+    int RootVersion,
+    int TimestampVersion,
+    int IndexVersion,
+    DateTimeOffset TimestampExpires,
+    DateTimeOffset IndexExpires,
+    DateTimeOffset VerifiedAt)
+{
+    /// <summary>The earliest expiry of the accepted timestamp and index.</summary>
+    public DateTimeOffset Expires => TimestampExpires < IndexExpires ? TimestampExpires : IndexExpires;
+}
+
+/// <summary>
+/// One verified refresh of a repository (repo add / update), written in ONE
+/// transaction: repository row, root, role high-water marks, expiries and —
+/// when a new index was accepted — every catalog row (D6).
+/// </summary>
+/// <param name="Index">The new catalog; null when timestamp.json did not change.</param>
+public sealed record RepositoryMetadataCommit(
+    RepositoryRecord Repository,
+    TrustedRoot Root,
+    TimestampMetadata Timestamp,
+    RepositoryIndex? Index,
+    int IndexVersion,
+    DateTimeOffset IndexExpires,
+    DateTimeOffset VerifiedAt,
+    bool IsNew);
+
+/// <summary>A search result row (D6: ordered by id).</summary>
+public sealed record SearchHit(string Repo, string Id, string DisplayName, string Description);
+
+/// <summary>The verified self-update feed state (A14): same root chain and high-water marks as D6.</summary>
+public sealed record SelfUpdateTrustState(byte[] RootEnvelope, int RootVersion, int TimestampVersion, int IndexVersion, DateTimeOffset VerifiedAt);
+
+/// <summary>
+/// The SQLite catalog (D6): the ONLY input for planning and search. A
+/// refresh writes the catalog rows and the accepted role versions
+/// (high-water marks) in ONE transaction; a lower version than the accepted
+/// one is a rollback/replay and is rejected (VerificationFailure, exit 5).
 /// </summary>
 public interface ICatalogStore
 {
-    Task IngestAsync(RepositoryRecord repository, RepositoryIndex index, CancellationToken ct);
+    /// <summary>
+    /// Commits a verified refresh atomically. <paramref name="beforeCommit"/> runs
+    /// INSIDE the transaction after every row is written (fault-injection point
+    /// catalog.rows.written: a crash there must leave the previous state intact).
+    /// </summary>
+    Task CommitRepositoryMetadataAsync(RepositoryMetadataCommit commit, Func<CancellationToken, Task> beforeCommit, CancellationToken ct);
 
     Task<RepositoryRecord?> GetRepositoryAsync(string name, CancellationToken ct);
 
     Task<IReadOnlyList<RepositoryRecord>> ListRepositoriesAsync(CancellationToken ct);
+
+    Task<RepositoryTrustState?> GetTrustStateAsync(string repo, CancellationToken ct);
+
+    /// <summary>Removes the repository with its catalog, trust state and search rows. False when it was not configured.</summary>
+    Task<bool> RemoveRepositoryAsync(string name, CancellationToken ct);
 
     /// <summary>Repositories whose catalog contains <paramref name="id"/> (ambiguity check, A9).</summary>
     Task<IReadOnlyList<string>> FindRepositoriesForAsync(string id, CancellationToken ct);
 
     Task<CatalogPackage?> GetPackageAsync(string repo, string id, CancellationToken ct);
 
+    Task<int> CountPackagesAsync(string repo, CancellationToken ct);
+
+    /// <summary>Substring match over search_text; <paramref name="loweredQuery"/> is already ToLowerInvariant() (D6).</summary>
+    Task<IReadOnlyList<SearchHit>> SearchAsync(string loweredQuery, CancellationToken ct);
+
     /// <summary>The accepted high-water mark of a role (D6), or null.</summary>
     Task<int?> GetAcceptedVersionAsync(string repo, string role, CancellationToken ct);
-}
 
-/// <summary>
-/// Signature verification of repository metadata (D6). Phase B ingests an
-/// UNSIGNED index.json through the final ingest path; the test-hooks build
-/// registers TestHooksUnsignedVerifier (compiled out of release builds) and
-/// release builds refuse all metadata until Phase D brings real signing.
-/// </summary>
-public interface IMetadataVerifier
-{
-    /// <summary>Returns the verified index.json payload bytes, or throws VerificationFailure (exit 5).</summary>
-    Task<byte[]> VerifyIndexAsync(string repo, byte[] document, CancellationToken ct);
+    Task<SelfUpdateTrustState?> GetSelfUpdateTrustAsync(CancellationToken ct);
+
+    Task CommitSelfUpdateTrustAsync(SelfUpdateTrustState state, CancellationToken ct);
 }
 
 // ---- installed state (A9/A10, D4) ---------------------------------------------
@@ -120,6 +171,9 @@ public interface IInstalledStore
 
     /// <summary>Pins or unpins an installed package. Returns false when nothing changed.</summary>
     Task<bool> SetPinnedAsync(string repo, string id, bool pinned, CancellationToken ct);
+
+    /// <summary>Self update (A14, D4): ONE transaction recording the new shim template digest on every shim row + state = StateCommitted.</summary>
+    Task CommitTemplateAsync(string opId, string templateSha256, CancellationToken ct);
 
     /// <summary>ONE transaction: delete the installed row (cascading shims/edges/pins) + state = StateCommitted.</summary>
     Task CommitUninstallAsync(string opId, string repo, string id, CancellationToken ct);

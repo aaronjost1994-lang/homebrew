@@ -119,14 +119,26 @@ public sealed class CliHarness : IDisposable
     public CliRun RunFault(string checkpoint, params string[] args) =>
         RunWith(new Dictionary<string, string?> { ["WINBREW_FAULT_AT"] = checkpoint }, args);
 
-    /// <summary>Config + localhost exception + unsigned ingest + a shim template (via the self-shim, like a real install).</summary>
+    /// <summary>Config + localhost exception + <c>repo add</c> (signed, D6) + a shim template (via the self-shim, like a real install).</summary>
     public CliHarness Ready(string template = "TEMPLATE-1")
     {
-        Expect(0, Run("config", "set", "testing.allowInsecureLocalhost", "true"));
-        Expect(0, Run("test-ingest", RepoName, Server.BaseUrl.ToString()));
+        AllowLocalhost();
+        Expect(0, AddRepo(RepoName));
         SetTemplate(template);
         return this;
     }
+
+    public void AllowLocalhost() => Expect(0, Run("config", "set", "testing.allowInsecureLocalhost", "true"));
+
+    /// <summary><c>wbrew repo add &lt;name&gt; &lt;fixture url&gt; --trust-root …</c> with the fixture's current root fingerprints.</summary>
+    public CliRun AddRepo(string name, IReadOnlyDictionary<string, string?>? env = null) =>
+        RunWith(env, ["repo", "add", name, Server.BaseUrl.ToString(), .. TrustRootArgs()]);
+
+    public string[] TrustRootArgs() => Repository.Signer.RootFingerprints.SelectMany(f => new[] { "--trust-root", f }).ToArray();
+
+    /// <summary>Environment that shifts the CLI's clock (test-hooks builds, WINBREW_TEST_NOW).</summary>
+    public static Dictionary<string, string?> At(DateTimeOffset now) =>
+        new() { ["WINBREW_TEST_NOW"] = now.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture) };
 
     /// <summary>
     /// Points the self-shim sidecar at app\0.0.0-test\ and writes the shim

@@ -73,9 +73,10 @@ public sealed record FixturePackage(
 
 /// <summary>
 /// A locally built repository (A16: fixtures built at test time): artifacts,
-/// manifests and an UNSIGNED index.json (Phase B ingest path) in a directory
-/// served by <see cref="LocalHttpServer"/>. Example manifests point only at
-/// the local server (A9).
+/// manifests and SIGNED D6 metadata (root.json + root/&lt;N&gt;.json,
+/// timestamp.json, index.json via <see cref="RepositorySigner"/>) in a
+/// directory served by <see cref="LocalHttpServer"/>. Example manifests point
+/// only at the local server (A9).
 /// </summary>
 public sealed class FixtureRepository
 {
@@ -94,9 +95,23 @@ public sealed class FixtureRepository
 
     public Uri BaseUrl { get; }
 
+    public RepositorySigner Signer { get; set; } = new();
+
     public int IndexVersion { get; set; } = 1;
 
-    public DateTimeOffset Expires { get; set; } = DateTimeOffset.UtcNow.AddDays(7);
+    /// <summary>index.json expiry (max lifetime 30 days, D6).</summary>
+    public DateTimeOffset Expires { get; set; } = DateTimeOffset.UtcNow.AddDays(20);
+
+    /// <summary>timestamp.json version; null = <see cref="IndexVersion"/>.</summary>
+    public int? TimestampVersion { get; set; }
+
+    /// <summary>timestamp.json expiry (max lifetime 7 days, D6).</summary>
+    public DateTimeOffset TimestampExpires { get; set; } = DateTimeOffset.UtcNow.AddDays(6);
+
+    public string TimestampPath => Path.Combine(Directory, "timestamp.json");
+
+    /// <summary>The last index payload (unsigned JSON) written by <see cref="Publish"/>.</summary>
+    public byte[] IndexPayload { get; private set; } = [];
 
     public FixtureRepository Add(FixturePackage package)
     {
@@ -122,7 +137,7 @@ public sealed class FixtureRepository
 
     public string IndexPath => Path.Combine(Directory, "index.json");
 
-    /// <summary>Writes every artifact, manifest and index.json. Returns the index bytes.</summary>
+    /// <summary>Writes every artifact, manifest and the signed metadata. Returns the index.json envelope bytes.</summary>
     public byte[] Publish()
     {
         var index = new JsonObject
@@ -190,8 +205,26 @@ public sealed class FixtureRepository
             };
         }
 
-        var bytes = JsonSerializer.SerializeToUtf8Bytes(index, Indented);
-        File.WriteAllBytes(IndexPath, bytes);
-        return bytes;
+        IndexPayload = JsonSerializer.SerializeToUtf8Bytes(index, Indented);
+        var envelope = Signer.SignIndex(IndexPayload);
+        WriteSignedMetadata(envelope);
+        return envelope;
+    }
+
+    /// <summary>Edits the published index payload, then re-signs it (a publisher that signs whatever it is given).</summary>
+    public void EditIndex(Action<JsonNode> edit)
+    {
+        var index = JsonNode.Parse(IndexPayload)!;
+        edit(index);
+        IndexPayload = JsonSerializer.SerializeToUtf8Bytes(index, Indented);
+        WriteSignedMetadata(Signer.SignIndex(IndexPayload));
+    }
+
+    /// <summary>Writes index.json = <paramref name="indexEnvelope"/>, a timestamp binding it, and the roots.</summary>
+    public void WriteSignedMetadata(byte[] indexEnvelope)
+    {
+        File.WriteAllBytes(IndexPath, indexEnvelope);
+        File.WriteAllBytes(TimestampPath, Signer.SignTimestamp(TimestampVersion ?? IndexVersion, TimestampExpires, indexEnvelope));
+        Signer.WriteRoots(Directory);
     }
 }

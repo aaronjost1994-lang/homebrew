@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using WinBrew.Application.Bundles;
 using WinBrew.Application.Catalog;
 using WinBrew.Application.Configuration;
 using WinBrew.Application.Doctor;
@@ -16,7 +17,6 @@ using WinBrew.Infrastructure.Files;
 using WinBrew.Infrastructure.Http;
 using WinBrew.Infrastructure.Locking;
 using WinBrew.Infrastructure.Sqlite;
-using WinBrew.Infrastructure.Trust;
 using WinBrew.Windows;
 
 namespace WinBrew.Cli;
@@ -99,7 +99,7 @@ internal static class ServiceConfigurator
         // ---- Phase B: portable lifecycle ports ----------------------------------------
         var flags = new RuntimeFlags(testHooks, Environment.GetEnvironmentVariable("WINBREW_TEST_MODE") == "1");
         builder.Services.AddSingleton(flags);
-        builder.Services.AddSingleton(TimeProvider.System);
+        builder.Services.AddSingleton(CliClock.Create(flags.TestModeEnvironment));
 
         // A13/A4: HttpClient via IHttpClientFactory; redirects are followed
         // manually, no cookies, no automatic decompression (sizes are checked
@@ -132,7 +132,7 @@ internal static class ServiceConfigurator
             sp.GetRequiredService<StoragePaths>().Directories["bin"], sp.GetRequiredService<IPackageFileSystem>()));
         builder.Services.AddSingleton<IUserPathEditor>(_ => new RegistryUserPathEditor(UserPathKey(flags)));
         builder.Services.AddSingleton<ISelfLocation, CliSelfLocation>();
-        builder.Services.AddSingleton(_ => MetadataVerifierFactory.Create(flags.TestHooksBuild, flags.TestModeEnvironment));
+        builder.Services.AddSingleton<IReleaseFeed>(_ => new CliReleaseFeed(flags.TestModeEnvironment));
 
         builder.Services.AddSingleton(sp => new LifecycleServices(
             sp.GetRequiredService<IStorageLayout>(),
@@ -171,7 +171,17 @@ internal static class ServiceConfigurator
         builder.Services.AddSingleton<InfoUseCase>();
         builder.Services.AddSingleton<RecoverUseCase>();
         builder.Services.AddSingleton<SelfInstallUseCase>();
-        builder.Services.AddSingleton<IngestIndexUseCase>();
+        builder.Services.AddSingleton<RepositoryMetadataService>();
+        builder.Services.AddSingleton<MetadataFreshness>();
+        builder.Services.AddSingleton<RepoAddUseCase>();
+        builder.Services.AddSingleton<RepoListUseCase>();
+        builder.Services.AddSingleton<RepoRemoveUseCase>();
+        builder.Services.AddSingleton<UpdateUseCase>();
+        builder.Services.AddSingleton<SearchUseCase>();
+        builder.Services.AddSingleton<BundleExportUseCase>();
+        builder.Services.AddSingleton<BundleInstallUseCase>();
+        builder.Services.AddSingleton<SelfUpdateUseCase>();
+        builder.Services.AddSingleton<SelfUninstallUseCase>();
         builder.Services.AddSingleton<LifecycleDoctorChecks>();
         builder.Services.AddSingleton<DoctorUseCase>(sp => new DoctorUseCase(
             sp.GetRequiredService<IVersionInfo>(),

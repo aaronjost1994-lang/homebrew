@@ -70,9 +70,7 @@ public sealed class LifecycleCliTests
         // A manifest for 3.0.0 exists on the server but is NOT in index.json.
         using var h = new CliHarness(r => r.AddHello().Add(new FixturePackage("hello", "3.0.0",
             [("bin/hello.exe", PeBytes.Create())], [("hello", "bin/hello.exe")])));
-        var index = JsonNode.Parse(File.ReadAllText(h.Repository.IndexPath))!;
-        ((JsonObject)index["packages"]!["hello"]!["versions"]!).Remove("3.0.0");
-        File.WriteAllText(h.Repository.IndexPath, index.ToJsonString());
+        h.Repository.EditIndex(index => ((JsonObject)index["packages"]!["hello"]!["versions"]!).Remove("3.0.0"));
         h.Ready();
 
         var run = CliHarness.Expect(3, h.Run("install", "hello@3.0.0", "--yes"));
@@ -89,9 +87,7 @@ public sealed class LifecycleCliTests
     {
         using var h = new CliHarness();
         // Index claims two architectures; the (digest-matching) manifest offers only x64.
-        var index = JsonNode.Parse(File.ReadAllText(h.Repository.IndexPath))!;
-        index["packages"]!["hello"]!["versions"]!["1.0.0"]!["architectures"] = new JsonArray("x64", "arm64");
-        File.WriteAllText(h.Repository.IndexPath, index.ToJsonString());
+        h.Repository.EditIndex(index => index["packages"]!["hello"]!["versions"]!["1.0.0"]!["architectures"] = new JsonArray("x64", "arm64"));
         h.Ready();
 
         var run = CliHarness.Expect(5, h.Run("install", "hello@1.0.0", "--yes"));
@@ -211,7 +207,7 @@ public sealed class LifecycleCliTests
     public void AmbiguousId_AcrossRepositories_IsAUsageError_ListingCandidates()
     {
         using var h = new CliHarness().Ready();
-        CliHarness.Expect(0, h.Run("test-ingest", "other", h.Server.BaseUrl.ToString()));
+        CliHarness.Expect(0, h.AddRepo("other"));
         var run = CliHarness.Expect(2, h.Run("install", "hello", "--yes", "--json"));
         var candidates = run.Json().GetProperty("error").GetProperty("details").GetProperty("candidates").EnumerateArray().Select(c => c.GetString()).ToList();
         Assert.Equal(["local/hello", "other/hello"], candidates);
@@ -326,15 +322,17 @@ public sealed class LifecycleCliTests
         h.Ready();
 
         h.Repository.IndexVersion = 4;
+        h.Repository.TimestampVersion = 6; // a NEW timestamp that binds an OLDER index
         h.Repository.Publish();
-        var rollback = CliHarness.Expect(5, h.Run("test-ingest", CliHarness.RepoName, h.Server.BaseUrl.ToString()));
-        Assert.Contains("rollback", rollback.StdErr, StringComparison.Ordinal);
+        var rollback = CliHarness.Expect(5, h.Run("update"));
+        Assert.Contains("index.json version 4 is lower than the accepted version 5", rollback.StdErr, StringComparison.Ordinal);
 
-        h.Repository.IndexVersion = 6;
+        h.Repository.IndexVersion = 7;
+        h.Repository.TimestampVersion = null;
         h.Repository.Expires = DateTimeOffset.UtcNow.AddHours(-1);
         h.Repository.Publish();
-        var expired = CliHarness.Expect(5, h.Run("test-ingest", CliHarness.RepoName, h.Server.BaseUrl.ToString()));
-        Assert.Contains("expired", expired.StdErr, StringComparison.Ordinal);
+        var expired = CliHarness.Expect(5, h.Run("update"));
+        Assert.Contains("index.json expired", expired.StdErr, StringComparison.Ordinal);
     }
 
     [TestHooksFact]

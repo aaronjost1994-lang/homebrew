@@ -103,6 +103,7 @@ public sealed class RecoveryService(LifecycleServices s)
                     break;
 
                 case FaultCheckpoints.SelfInstallAppCopied:
+                case FaultCheckpoints.SelfUpdateAppCopied:
                     var self = JournalJson.Read<SelfInstallIntent>(step.IntentJson);
                     await s.Files.DeleteDirectoryAsync(self.TemporaryDirectory, ct);
                     if (!self.AppDirectoryExisted)
@@ -189,6 +190,7 @@ public sealed class RecoveryService(LifecycleServices s)
         {
             case OperationType.Install:
             case OperationType.Upgrade:
+            case OperationType.SelfUpdate:
                 var commit = steps.LastOrDefault(st => st.Name == FaultCheckpoints.StateCommitted)
                     ?? throw new InvalidDataException("the state.committed step is missing from the journal");
                 await PostCommit.FinishInstallAsync(s, op, JournalJson.Read<CommitIntent>(commit.IntentJson), ct);
@@ -208,7 +210,7 @@ public sealed class RecoveryService(LifecycleServices s)
 
             default:
                 throw new InvalidDataException(
-                    $"operation type '{OperationTypeWire.ToWire(record.Type)}' has no Phase B recovery handler");
+                    $"operation type '{OperationTypeWire.ToWire(record.Type)}' has no recovery handler");
         }
     }
 

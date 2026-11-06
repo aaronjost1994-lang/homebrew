@@ -6,6 +6,7 @@ using WinBrew.Application.Ports;
 using WinBrew.Core;
 using WinBrew.Core.Catalog;
 using WinBrew.Core.Operations;
+using WinBrew.Core.Trust;
 
 namespace WinBrew.Infrastructure.Sqlite;
 
@@ -63,74 +64,276 @@ public sealed class SqliteStateStore(string databasePath, TimeProvider time) : I
 
     // ==== catalog (D6) =================================================================
 
-    public async Task IngestAsync(RepositoryRecord repository, RepositoryIndex index, CancellationToken ct)
+    public async Task CommitRepositoryMetadataAsync(RepositoryMetadataCommit commit, Func<CancellationToken, Task> beforeCommit, CancellationToken ct)
     {
+        var repository = commit.Repository;
         await using var c = await OpenAsync(write: true, ct);
         await using var tx = (SqliteTransaction)await c.BeginTransactionAsync(ct);
         var now = Now();
 
-        await ExecAsync(c, tx, """
-            INSERT INTO repositories(name, url, created_at) VALUES ($n, $u, $t)
-            ON CONFLICT(name) DO UPDATE SET url = excluded.url
-            """, ct, ("$n", repository.Name), ("$u", repository.Url), ("$t", now));
-
-        // Replay/rollback protection (D6): never accept a lower index version.
-        await using (var read = Command(c, "SELECT accepted_version FROM role_versions WHERE repo=$r AND role='index'", tx, ("$r", repository.Name)))
+        var exists = await ScalarAsync(c, tx, "SELECT count(*) FROM repositories WHERE name=$n", ct, ("$n", repository.Name)) is long n && n > 0;
+        if (commit.IsNew && exists)
         {
-            var current = await read.ExecuteScalarAsync(ct);
-            if (current is long accepted && index.Version < accepted)
+            throw new WinBrewException(WinBrewErrorCode.ConflictOrRefused,
+                $"Repository '{repository.Name}' is already configured; remove it first (wbrew repo remove {repository.Name}).");
+        }
+
+        if (!commit.IsNew && !exists)
+        {
+            throw new WinBrewException(WinBrewErrorCode.NotFound, $"Repository '{repository.Name}' is not configured.");
+        }
+
+        if (commit.IsNew)
+        {
+            await ExecAsync(c, tx, "INSERT INTO repositories(name, url, created_at) VALUES ($n, $u, $t)", ct,
+                ("$n", repository.Name), ("$u", repository.Url), ("$t", now));
+        }
+
+        // Replay/rollback protection (D6), re-checked inside the transaction.
+        var marks = new (string Role, int Version)[]
+        {
+            (TrustRoles.Root, commit.Root.Version),
+            (TrustRoles.Timestamp, commit.Timestamp.Version),
+            (TrustRoles.Index, commit.IndexVersion),
+        };
+        foreach (var (role, version) in marks)
+        {
+            var current = await ScalarAsync(c, tx, "SELECT accepted_version FROM role_versions WHERE repo=$r AND role=$role", ct,
+                ("$r", repository.Name), ("$role", role));
+            if (current is long accepted && version < accepted)
             {
                 throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
-                    $"index.json version {index.Version} for '{repository.Name}' is lower than the accepted version {accepted} " +
+                    $"{role}.json version {version} for '{repository.Name}' is lower than the accepted version {accepted} " +
                     "(rollback/replay rejected, D6).",
-                    new Dictionary<string, object?> { ["accepted"] = accepted, ["offered"] = index.Version });
+                    new Dictionary<string, object?> { ["role"] = role, ["accepted"] = accepted, ["offered"] = version });
             }
+
+            await ExecAsync(c, tx, """
+                INSERT INTO role_versions(repo, role, accepted_version, accepted_at) VALUES ($r, $role, $v, $t)
+                ON CONFLICT(repo, role) DO UPDATE SET accepted_version = excluded.accepted_version, accepted_at = excluded.accepted_at
+                """, ct, ("$r", repository.Name), ("$role", role), ("$v", version), ("$t", now));
         }
 
-        // Replace this repository's catalog (cascades remove versions/archs/deps).
-        await ExecAsync(c, tx, "DELETE FROM catalog_packages WHERE repo=$r", ct, ("$r", repository.Name));
+        await ExecAsync(c, tx, """
+            INSERT INTO repository_trust(repo, root_envelope, root_fingerprints, timestamp_expires, index_expires, verified_at)
+            VALUES ($r, $root, $fp, $te, $ie, $va)
+            ON CONFLICT(repo) DO UPDATE SET root_envelope = excluded.root_envelope, root_fingerprints = excluded.root_fingerprints,
+              timestamp_expires = excluded.timestamp_expires, index_expires = excluded.index_expires, verified_at = excluded.verified_at
+            """, ct, ("$r", repository.Name), ("$root", commit.Root.Envelope), ("$fp", string.Join(',', commit.Root.RootFingerprints)),
+            ("$te", Iso(commit.Timestamp.Expires)), ("$ie", Iso(commit.IndexExpires)), ("$va", Iso(commit.VerifiedAt)));
 
-        foreach (var (id, package) in index.Packages.OrderBy(p => p.Key, StringComparer.Ordinal))
+        if (commit.Index is { } index)
         {
-            var searchText = $"{id} {package.DisplayName} {package.Description}".ToLowerInvariant();
-            await ExecAsync(c, tx, """
-                INSERT INTO catalog_packages(repo, id, display_name, description, search_text)
-                VALUES ($r, $i, $d, $desc, $s)
-                """, ct, ("$r", repository.Name), ("$i", id), ("$d", package.DisplayName), ("$desc", package.Description), ("$s", searchText));
+            await WriteCatalogAsync(c, tx, repository.Name, index, ct);
+        }
 
-            foreach (var (version, entry) in package.Versions)
+        await beforeCommit(ct);
+        await tx.CommitAsync(ct);
+    }
+
+    private static async Task WriteCatalogAsync(SqliteConnection c, SqliteTransaction tx, string repo, RepositoryIndex index, CancellationToken ct)
+    {
+        // Replace this repository's catalog (cascades remove versions/archs/deps).
+        await ExecAsync(c, tx, "DELETE FROM catalog_packages WHERE repo=$r", ct, ("$r", repo));
+        await ExecAsync(c, tx, "DELETE FROM catalog_search WHERE repo=$r", ct, ("$r", repo));
+
+        await using var package = Command(c, """
+            INSERT INTO catalog_packages(repo, id, display_name, description, search_text) VALUES ($r, $i, $d, $desc, $s)
+            """, tx, ("$r", repo), ("$i", ""), ("$d", ""), ("$desc", ""), ("$s", ""));
+        await using var search = Command(c, "INSERT INTO catalog_search(search_text, repo, id) VALUES ($s, $r, $i)", tx,
+            ("$s", ""), ("$r", repo), ("$i", ""));
+        await using var version = Command(c, """
+            INSERT INTO catalog_versions(repo, package_id, version, manifest_sha256, manifest_size, is_prerelease)
+            VALUES ($r, $i, $v, $sha, $size, $pre)
+            """, tx, ("$r", repo), ("$i", ""), ("$v", ""), ("$sha", ""), ("$size", 0L), ("$pre", 0));
+        await using var arch = Command(c, "INSERT INTO catalog_architectures(repo, package_id, version, arch) VALUES ($r, $i, $v, $a)", tx,
+            ("$r", repo), ("$i", ""), ("$v", ""), ("$a", ""));
+        await using var dep = Command(c, """
+            INSERT INTO catalog_dependencies(repo, package_id, version, dep_id, dep_range, position) VALUES ($r, $i, $v, $d, $range, $p)
+            """, tx, ("$r", repo), ("$i", ""), ("$v", ""), ("$d", ""), ("$range", ""), ("$p", 0));
+
+        foreach (var (id, entry) in index.Packages.OrderBy(p => p.Key, StringComparer.Ordinal))
+        {
+            // D6: search_text is built with ToLowerInvariant() at ingest.
+            var searchText = $"{id} {entry.DisplayName} {entry.Description}".ToLowerInvariant();
+            Set(package, ("$i", id), ("$d", entry.DisplayName), ("$desc", entry.Description), ("$s", searchText));
+            await package.ExecuteNonQueryAsync(ct);
+            Set(search, ("$s", searchText), ("$i", id));
+            await search.ExecuteNonQueryAsync(ct);
+
+            foreach (var (v, e) in entry.Versions)
             {
-                var prerelease = NuGetVersion.Parse(version).IsPrerelease;
-                await ExecAsync(c, tx, """
-                    INSERT INTO catalog_versions(repo, package_id, version, manifest_sha256, manifest_size, is_prerelease)
-                    VALUES ($r, $i, $v, $sha, $size, $pre)
-                    """, ct, ("$r", repository.Name), ("$i", id), ("$v", version), ("$sha", entry.Sha256),
-                    ("$size", entry.Size), ("$pre", prerelease ? 1 : 0));
+                Set(version, ("$i", id), ("$v", v), ("$sha", e.Sha256), ("$size", e.Size), ("$pre", NuGetVersion.Parse(v).IsPrerelease ? 1 : 0));
+                await version.ExecuteNonQueryAsync(ct);
 
-                foreach (var arch in entry.Architectures)
+                foreach (var a in e.Architectures)
                 {
-                    await ExecAsync(c, tx, """
-                        INSERT INTO catalog_architectures(repo, package_id, version, arch) VALUES ($r, $i, $v, $a)
-                        """, ct, ("$r", repository.Name), ("$i", id), ("$v", version), ("$a", arch));
+                    Set(arch, ("$i", id), ("$v", v), ("$a", a));
+                    await arch.ExecuteNonQueryAsync(ct);
                 }
 
-                for (var position = 0; position < entry.Dependencies.Count; position++)
+                for (var position = 0; position < e.Dependencies.Count; position++)
                 {
-                    var dependency = entry.Dependencies[position];
-                    await ExecAsync(c, tx, """
-                        INSERT INTO catalog_dependencies(repo, package_id, version, dep_id, dep_range, position)
-                        VALUES ($r, $i, $v, $d, $range, $p)
-                        """, ct, ("$r", repository.Name), ("$i", id), ("$v", version), ("$d", dependency.Id),
-                        ("$range", dependency.Range), ("$p", position));
+                    Set(dep, ("$i", id), ("$v", v), ("$d", e.Dependencies[position].Id), ("$range", e.Dependencies[position].Range), ("$p", position));
+                    await dep.ExecuteNonQueryAsync(ct);
                 }
+            }
+        }
+    }
+
+    private static void Set(SqliteCommand command, params (string Name, object? Value)[] values)
+    {
+        foreach (var (name, value) in values)
+        {
+            command.Parameters[name].Value = value ?? DBNull.Value;
+        }
+    }
+
+    private static async Task<object?> ScalarAsync(SqliteConnection c, SqliteTransaction? tx, string sql, CancellationToken ct, params (string, object?)[] p)
+    {
+        await using var command = Command(c, sql, tx, p);
+        return await command.ExecuteScalarAsync(ct);
+    }
+
+    private static string Iso(DateTimeOffset value) => value.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+
+    private static DateTimeOffset ParseIso(string value) =>
+        DateTimeOffset.Parse(value, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal);
+
+    public async Task<RepositoryTrustState?> GetTrustStateAsync(string repo, CancellationToken ct)
+    {
+        if (!Exists)
+        {
+            return null;
+        }
+
+        await using var c = await OpenAsync(write: false, ct);
+        await using var cmd = Command(c, """
+            SELECT r.name, r.url, t.root_envelope, t.root_fingerprints, t.timestamp_expires, t.index_expires, t.verified_at,
+                   (SELECT accepted_version FROM role_versions WHERE repo = r.name AND role = 'root'),
+                   (SELECT accepted_version FROM role_versions WHERE repo = r.name AND role = 'timestamp'),
+                   (SELECT accepted_version FROM role_versions WHERE repo = r.name AND role = 'index')
+            FROM repositories r JOIN repository_trust t ON t.repo = r.name WHERE r.name = $n
+            """, null, ("$n", repo));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        if (!await r.ReadAsync(ct))
+        {
+            return null;
+        }
+
+        return new RepositoryTrustState(r.GetString(0), r.GetString(1), (byte[])r.GetValue(2),
+            r.GetString(3).Split(',', StringSplitOptions.RemoveEmptyEntries),
+            (int)r.GetInt64(7), (int)r.GetInt64(8), (int)r.GetInt64(9),
+            ParseIso(r.GetString(4)), ParseIso(r.GetString(5)), ParseIso(r.GetString(6)));
+    }
+
+    public async Task<bool> RemoveRepositoryAsync(string name, CancellationToken ct)
+    {
+        await using var c = await OpenAsync(write: true, ct);
+        await using var tx = (SqliteTransaction)await c.BeginTransactionAsync(ct);
+        await ExecAsync(c, tx, "DELETE FROM catalog_search WHERE repo=$r", ct, ("$r", name));
+        await using var delete = Command(c, "DELETE FROM repositories WHERE name=$r", tx, ("$r", name));
+        var removed = await delete.ExecuteNonQueryAsync(ct) > 0;
+        await tx.CommitAsync(ct);
+        return removed;
+    }
+
+    public async Task<int> CountPackagesAsync(string repo, CancellationToken ct)
+    {
+        if (!Exists)
+        {
+            return 0;
+        }
+
+        await using var c = await OpenAsync(write: false, ct);
+        return Convert.ToInt32(await ScalarAsync(c, null, "SELECT count(*) FROM catalog_packages WHERE repo=$r", ct, ("$r", repo)),
+            CultureInfo.InvariantCulture);
+    }
+
+    public async Task<IReadOnlyList<SearchHit>> SearchAsync(string loweredQuery, CancellationToken ct)
+    {
+        if (!Exists)
+        {
+            return [];
+        }
+
+        await using var c = await OpenAsync(write: false, ct);
+
+        // D6: substring match (a prefix is a substring) over search_text. Queries of
+        // three or more characters use the FTS5 trigram index with GLOB (case-sensitive:
+        // both sides are already ToLowerInvariant()); shorter ones match directly
+        // with instr(). LIKE is never used — it folds only ASCII.
+        var sql = loweredQuery.Length >= 3
+            ? """
+              SELECT p.repo, p.id, p.display_name, p.description
+              FROM catalog_search s JOIN catalog_packages p ON p.repo = s.repo AND p.id = s.id
+              WHERE s.search_text GLOB $pattern
+              ORDER BY p.id, p.repo
+              """
+            : """
+              SELECT repo, id, display_name, description FROM catalog_packages
+              WHERE instr(search_text, $q) > 0
+              ORDER BY id, repo
+              """;
+        await using var cmd = Command(c, sql, null, ("$pattern", "*" + EscapeGlob(loweredQuery) + "*"), ("$q", loweredQuery));
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        var hits = new List<SearchHit>();
+        while (await r.ReadAsync(ct))
+        {
+            hits.Add(new SearchHit(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3)));
+        }
+
+        return hits;
+    }
+
+    /// <summary>GLOB metacharacters become single-character classes, so the query matches literally.</summary>
+    internal static string EscapeGlob(string value)
+    {
+        var builder = new System.Text.StringBuilder(value.Length);
+        foreach (var ch in value)
+        {
+            _ = ch is '*' or '?' or '[' or ']' ? builder.Append('[').Append(ch).Append(']') : builder.Append(ch);
+        }
+
+        return builder.ToString();
+    }
+
+    public async Task<SelfUpdateTrustState?> GetSelfUpdateTrustAsync(CancellationToken ct)
+    {
+        if (!Exists)
+        {
+            return null;
+        }
+
+        await using var c = await OpenAsync(write: false, ct);
+        await using var cmd = Command(c, "SELECT root_envelope, root_version, timestamp_version, index_version, verified_at FROM self_update_trust WHERE scope='self'", null);
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        return await r.ReadAsync(ct)
+            ? new SelfUpdateTrustState((byte[])r.GetValue(0), (int)r.GetInt64(1), (int)r.GetInt64(2), (int)r.GetInt64(3), ParseIso(r.GetString(4)))
+            : null;
+    }
+
+    public async Task CommitSelfUpdateTrustAsync(SelfUpdateTrustState state, CancellationToken ct)
+    {
+        await using var c = await OpenAsync(write: true, ct);
+        await using var tx = (SqliteTransaction)await c.BeginTransactionAsync(ct);
+        await using (var read = Command(c, "SELECT root_version, timestamp_version, index_version FROM self_update_trust WHERE scope='self'", tx))
+        await using (var r = await read.ExecuteReaderAsync(ct))
+        {
+            if (await r.ReadAsync(ct) && (state.RootVersion < r.GetInt64(0) || state.TimestampVersion < r.GetInt64(1) || state.IndexVersion < r.GetInt64(2)))
+            {
+                throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
+                    "The self-update feed offered metadata older than the accepted versions (rollback/replay rejected, A14/D6).");
             }
         }
 
         await ExecAsync(c, tx, """
-            INSERT INTO role_versions(repo, role, accepted_version, accepted_at) VALUES ($r, 'index', $v, $t)
-            ON CONFLICT(repo, role) DO UPDATE SET accepted_version = excluded.accepted_version, accepted_at = excluded.accepted_at
-            """, ct, ("$r", repository.Name), ("$v", index.Version), ("$t", now));
-
+            INSERT INTO self_update_trust(scope, root_envelope, root_version, timestamp_version, index_version, verified_at)
+            VALUES ('self', $root, $rv, $tv, $iv, $va)
+            ON CONFLICT(scope) DO UPDATE SET root_envelope = excluded.root_envelope, root_version = excluded.root_version,
+              timestamp_version = excluded.timestamp_version, index_version = excluded.index_version, verified_at = excluded.verified_at
+            """, ct, ("$root", state.RootEnvelope), ("$rv", state.RootVersion), ("$tv", state.TimestampVersion),
+            ("$iv", state.IndexVersion), ("$va", Iso(state.VerifiedAt)));
         await tx.CommitAsync(ct);
     }
 
@@ -466,6 +669,15 @@ public sealed class SqliteStateStore(string databasePath, TimeProvider time) : I
             ? "INSERT OR IGNORE INTO pins(repo, package_id, pinned_at) VALUES ($r, $i, $t)"
             : "DELETE FROM pins WHERE repo=$r AND package_id=$i", null, ("$r", repo), ("$i", id), ("$t", Now()));
         return await cmd.ExecuteNonQueryAsync(ct) > 0;
+    }
+
+    public async Task CommitTemplateAsync(string opId, string templateSha256, CancellationToken ct)
+    {
+        await using var c = await OpenAsync(write: true, ct);
+        await using var tx = (SqliteTransaction)await c.BeginTransactionAsync(ct);
+        await ExecAsync(c, tx, "UPDATE shims SET template_sha256=$s, updated_at=$t", ct, ("$s", templateSha256), ("$t", Now()));
+        await SetStateInTransactionAsync(c, tx, opId, OperationState.StateCommitted, null, ct);
+        await tx.CommitAsync(ct);
     }
 
     public async Task CommitUninstallAsync(string opId, string repo, string id, CancellationToken ct)

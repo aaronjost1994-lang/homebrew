@@ -100,6 +100,27 @@ public sealed class SqliteStateDatabase : IStateDatabase
         }
     }
 
+    public Task DeleteDatabaseAsync(CancellationToken ct)
+    {
+        SqliteConnection.ClearAllPools();
+        foreach (var suffix in new[] { "", "-wal", "-shm", "-journal" })
+        {
+            ct.ThrowIfCancellationRequested();
+            var path = _databasePath + suffix;
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+
+        if (Directory.Exists(_backupDirectory))
+        {
+            Directory.Delete(_backupDirectory, recursive: true);
+        }
+
+        return Task.CompletedTask;
+    }
+
     // ---- internals -------------------------------------------------------
 
     private async Task<SqliteConnection> OpenAsync(bool readOnly, CancellationToken ct)

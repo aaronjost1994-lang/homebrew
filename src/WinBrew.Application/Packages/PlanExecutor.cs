@@ -46,6 +46,7 @@ public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
         {
             var (manifest, cachePath, bytes) = await FetchVerifiedManifestAsync(item, settings, offline, ct);
             manifests[item.Package] = manifest;
+            EnsureMatchesLock(item, manifest);
             if (bytes is not null)
             {
                 verifiedBytes.Add((cachePath, bytes));
@@ -216,7 +217,15 @@ public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
     {
         var catalogPackage = await s.Catalog.GetPackageAsync(item.Repo, item.Id, ct)
             ?? throw new WinBrewException(WinBrewErrorCode.NotFound, $"{item.Package} vanished from the catalog.");
-        var entry = catalogPackage.Versions.Single(v => v.Version == item.Version);
+        var entry = catalogPackage.Versions.SingleOrDefault(v => v.Version == item.Version)
+            ?? throw new WinBrewException(WinBrewErrorCode.NotFound, $"{item.Package}@{item.Version} is not in the verified catalog (A15).");
+        if (item.Locked is { } locked && locked.ManifestSha256 != entry.ManifestSha256)
+        {
+            throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
+                $"{item.Package}@{item.Version}: the lockfile's manifest digest {locked.ManifestSha256} differs from the signed index ({entry.ManifestSha256}) (A15).",
+                new Dictionary<string, object?> { ["expected"] = locked.ManifestSha256, ["actual"] = entry.ManifestSha256 });
+        }
+
         var repository = await s.Catalog.GetRepositoryAsync(item.Repo, ct)
             ?? throw new WinBrewException(WinBrewErrorCode.NotFound, $"Repository '{item.Repo}' is not configured.");
 
@@ -259,6 +268,26 @@ public sealed class PlanExecutor(LifecycleServices s, RecoveryService recovery)
     }
 
     /// <summary>A10: the manifest's id, version, dependencies and architectures must EXACTLY match the catalog entry (exit 5).</summary>
+    /// <summary>A15: a locked item's artifact must be exactly the locked URL and SHA-256 (exit 5 before anything changes).</summary>
+    public static void EnsureMatchesLock(PlanItem item, Manifest manifest)
+    {
+        if (item.Locked is not { } locked)
+        {
+            return;
+        }
+
+        var artifact = manifest.Artifacts.SingleOrDefault(a => a.Architecture == item.Arch)
+            ?? throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
+                $"{item.Package}@{item.Version} has no {item.Arch} artifact, which the lockfile requires (A15).");
+        if (artifact.Sha256 != locked.ArtifactSha256 || artifact.Url != locked.ArtifactUrl)
+        {
+            throw new WinBrewException(WinBrewErrorCode.VerificationFailure,
+                $"{item.Package}@{item.Version} ({item.Arch}): the manifest's artifact {artifact.Sha256} at {Core.Net.UrlPolicy.Redact(new Uri(artifact.Url))} " +
+                $"differs from the lockfile ({locked.ArtifactSha256}) (A15).",
+                new Dictionary<string, object?> { ["expected"] = locked.ArtifactSha256, ["actual"] = artifact.Sha256 });
+        }
+    }
+
     public static void EnsureMatchesCatalog(PlanItem item, Manifest manifest, CatalogVersion entry)
     {
         var problems = new List<string>();

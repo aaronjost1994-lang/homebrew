@@ -43,6 +43,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- A14: the self-update feed and its INITIAL release root (base64 root.json
+         envelope). Empty by default: `self update` then exits 3. -->
+    <AssemblyMetadata Include="WinBrewReleaseFeedUrl" Value="$(WinBrewReleaseFeedUrl)" />
+    <AssemblyMetadata Include="WinBrewReleaseRoot" Value="$(WinBrewReleaseRoot)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="app.manifest" />
     <ApplicationManifest Include="app.manifest" />
   </ItemGroup>

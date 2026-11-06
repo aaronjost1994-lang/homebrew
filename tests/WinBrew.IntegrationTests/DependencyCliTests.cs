@@ -126,9 +126,7 @@ public sealed class DependencyCliTests
     {
         using var h = new CliHarness(AppAndLib);
         // index.json claims app 1.0.0 has NO dependencies; its (digest-matching) manifest says lib [1.0.0,2.0.0).
-        var index = JsonNode.Parse(File.ReadAllText(h.Repository.IndexPath))!;
-        index["packages"]!["app"]!["versions"]!["1.0.0"]!["dependencies"] = new JsonArray();
-        File.WriteAllText(h.Repository.IndexPath, index.ToJsonString());
+        h.Repository.EditIndex(index => index["packages"]!["app"]!["versions"]!["1.0.0"]!["dependencies"] = new JsonArray());
         h.Ready();
         var before = Snapshot(h.Root);
 
@@ -153,7 +151,7 @@ public sealed class DependencyCliTests
         using var h = new CliHarness(AppAndLib).Ready();
         var alone = CliHarness.Expect(0, h.Run("install", "local/app", "--dry-run", "--json")).Json()
             .GetProperty("data").GetProperty("plan").GetProperty("items").ToString();
-        CliHarness.Expect(0, h.Run("test-ingest", "other", h.Server.BaseUrl.ToString()));
+        CliHarness.Expect(0, h.AddRepo("other"));
         var withOther = CliHarness.Expect(0, h.Run("install", "local/app", "--dry-run", "--json")).Json()
             .GetProperty("data").GetProperty("plan").GetProperty("items").ToString();
         Assert.Equal(alone, withOther);

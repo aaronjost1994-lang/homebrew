@@ -1,9 +1,9 @@
 # WinBrew — planning prompts + implementation
 
-**Version:** 2.3.1 (2026-11-03) · **Status:** Phases A, B and C
-**complete** on the Linux dev host (`docs/checkpoints/phase-c.md`: unit
-524/524, integration 167 passed in the test-hooks build; Windows-only tests
-skip with a reason until Windows CI). Phase D is next.
+**Version:** 2.3.1 (2026-11-03) · **Status:** Phases A–D
+**complete** on the Linux dev host (`docs/checkpoints/phase-d.md`: unit
+547/547, integration 215 passed in the test-hooks build; Windows-only tests
+skip with a reason until Windows CI). Phase E (v1.1) is next.
 
 This private repository holds BOTH:
 

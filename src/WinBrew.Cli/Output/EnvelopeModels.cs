@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using WinBrew.Application.Bundles;
 using WinBrew.Application.Catalog;
 using WinBrew.Application.Doctor;
 using WinBrew.Application.Lifecycle;
@@ -85,7 +86,20 @@ public sealed record ConfigListData(IReadOnlyList<ConfigValueRow> Values);
 [JsonSerializable(typeof(RecoverResult))]
 [JsonSerializable(typeof(RecoveredOperation))]
 [JsonSerializable(typeof(SelfInstallResult))]
-[JsonSerializable(typeof(IngestResult))]
+[JsonSerializable(typeof(RepoAddResult))]
+[JsonSerializable(typeof(RepoListResult))]
+[JsonSerializable(typeof(RepoRow))]
+[JsonSerializable(typeof(RepoRemoveResult))]
+[JsonSerializable(typeof(UpdateResult))]
+[JsonSerializable(typeof(UpdateRow))]
+[JsonSerializable(typeof(List<UpdateRow>))]
+[JsonSerializable(typeof(SearchResult))]
+[JsonSerializable(typeof(SearchRow))]
+[JsonSerializable(typeof(BundleExportResult))]
+[JsonSerializable(typeof(BundleInstallResult))]
+[JsonSerializable(typeof(SelfUpdateResult))]
+[JsonSerializable(typeof(SelfUninstallResult))]
+[JsonSerializable(typeof(List<int>))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(string[]))]
 [JsonSerializable(typeof(long))]

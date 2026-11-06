@@ -26,4 +26,11 @@ public interface IStateDatabase
     /// recorded in the Phase A checkpoint/ADR.
     /// </summary>
     Task<bool> SupportsFts5Async(CancellationToken ct);
+
+    /// <summary>
+    /// self uninstall (A14): releases pooled connections, then deletes
+    /// winbrew.db (+ -wal/-shm) and the migration backups. The lock file is left
+    /// alone (it is held by the running command).
+    /// </summary>
+    Task DeleteDatabaseAsync(CancellationToken ct);
 }

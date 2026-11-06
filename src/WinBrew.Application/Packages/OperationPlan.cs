@@ -24,12 +24,19 @@ public sealed record PlanItem(
     bool PromoteToExplicit,
     IReadOnlyList<string> Dependencies)
 {
+    /// <summary>bundle install --locked (A15): the exact digests the lockfile requires; null when resolved normally.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public LockPin? Locked { get; init; }
+
     /// <summary>True when files change (install or upgrade).</summary>
     public bool Changes => Action is "install" or "upgrade";
 
     /// <summary>"x64 → arm64" when the architecture is re-selected (A10).</summary>
     public string? ArchitectureTransition => PreviousArch is not null && PreviousArch != Arch ? $"{PreviousArch} → {Arch}" : null;
 }
+
+/// <summary>The lockfile's exact manifest and artifact for one package (A15).</summary>
+public sealed record LockPin(string ManifestSha256, string ArtifactUrl, string ArtifactSha256);
 
 /// <summary>The full plan shown before consent: every package of the resolved graph, in install order.</summary>
 public sealed record OperationPlan(string Command, IReadOnlyList<PlanItem> Items, IReadOnlyList<string> Warnings)

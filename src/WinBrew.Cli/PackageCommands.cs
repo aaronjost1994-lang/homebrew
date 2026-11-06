@@ -1,6 +1,5 @@
 using System.CommandLine;
 using Microsoft.Extensions.DependencyInjection;
-using WinBrew.Application.Catalog;
 using WinBrew.Application.Lifecycle;
 using WinBrew.Application.Packages;
 using WinBrew.Application.Ports;
@@ -10,8 +9,7 @@ using WinBrew.Cli.Output;
 namespace WinBrew.Cli;
 
 /// <summary>
-/// Phase B commands: install, uninstall, list, info, recover, self install
-/// (plus the test-hooks-only catalog ingest). Handlers parse, call ONE use
+/// Package commands: install, upgrade, uninstall, list, info, recover, self install. Handlers parse, call ONE use
 /// case and render (A5); consent follows A8 (--yes approves the plan only;
 /// --modify-path is its own consent; non-interactive + missing consent = 10).
 /// </summary>
@@ -27,11 +25,6 @@ internal static class PackageCommands
         root.Subcommands.Add(BuildInfo(services));
         root.Subcommands.Add(BuildRecover(services));
         self.Subcommands.Add(BuildSelfInstall(services));
-
-        if (ServiceConfigurator.TestHooksBuild)
-        {
-            root.Subcommands.Add(BuildTestIngest(services));
-        }
     }
 
     // ---- install / upgrade ------------------------------------------------------------------
@@ -91,7 +84,7 @@ internal static class PackageCommands
         return command;
     }
 
-    private static PlanApproval Approver(IServiceProvider sp, ParseResult parseResult, bool nonInteractive, bool json) =>
+    internal static PlanApproval Approver(IServiceProvider sp, ParseResult parseResult, bool nonInteractive, bool json) =>
         async (plan, t) =>
         {
             if (!json)
@@ -102,7 +95,7 @@ internal static class PackageCommands
             return await ApproveAsync(sp, parseResult, nonInteractive, t);
         };
 
-    private static void RenderPlanResult(PlanResult result, bool json)
+    internal static void RenderPlanResult(PlanResult result, bool json)
     {
         if (json)
         {
@@ -128,7 +121,7 @@ internal static class PackageCommands
     }
 
     /// <summary>The full plan (A8): every package of the resolved graph, dependencies first.</summary>
-    private static void RenderPlan(OperationPlan plan)
+    internal static void RenderPlan(OperationPlan plan)
     {
         Console.Out.WriteLine($"Plan ({plan.Command}):");
         foreach (var item in plan.Items)
@@ -251,7 +244,7 @@ internal static class PackageCommands
             return CommandRunner.RunAsync("info", json, async token =>
             {
                 var info = await services.Value.GetRequiredService<InfoUseCase>()
-                    .ExecuteAsync(parseResult.GetRequiredValue(package), token);
+                    .ExecuteAsync(parseResult.GetRequiredValue(package), parseResult.GetValue(GlobalOptions.Offline), token);
                 if (!json)
                 {
                     Console.Out.WriteLine($"{info.Package}: {info.DisplayName}");
@@ -304,7 +297,7 @@ internal static class PackageCommands
         return command;
     }
 
-    private static void RenderRecovered(IReadOnlyList<RecoveredOperation> recovered)
+    internal static void RenderRecovered(IReadOnlyList<RecoveredOperation> recovered)
     {
         foreach (var op in recovered)
         {
@@ -344,46 +337,9 @@ internal static class PackageCommands
         return command;
     }
 
-    // ---- test-hooks only: catalog ingest through the FINAL ingest path ---------------------------
-
-    private static Command BuildTestIngest(Lazy<IServiceProvider> services)
-    {
-        var repo = new Argument<string>("repo") { Description = "Repository short name." };
-        var url = new Argument<string>("url") { Description = "Repository base URL (index.json is fetched from <url>/index.json)." };
-        var command = new Command("test-ingest",
-            "[TEST-HOOKS BUILD ONLY] Ingest an unsigned index.json via TestHooksUnsignedVerifier (Phase B; real signing is Phase D).")
-        {
-            Hidden = true,
-        };
-        command.Arguments.Add(repo);
-        command.Arguments.Add(url);
-        command.SetAction((parseResult, ct) =>
-        {
-            var json = parseResult.GetValue(GlobalOptions.Json);
-            return CommandRunner.RunAsync("test-ingest", json, async token =>
-            {
-                var sp = services.Value;
-                using var scope = await sp.GetRequiredService<MutationSession>().BeginAsync("test-ingest", token);
-                var baseUrl = parseResult.GetRequiredValue(url).TrimEnd('/');
-                var (body, _) = await sp.GetRequiredService<IHttpFetcher>().GetBytesAsync(new FetchRequest(
-                    new Uri(baseUrl + "/index.json"), null, scope.Settings.MaxMetadataBytes, scope.Settings.DownloadTimeout,
-                    scope.Settings.DownloadRetries, scope.Settings.Localhost), token);
-                var result = await sp.GetRequiredService<IngestIndexUseCase>().ExecuteAsync(
-                    new RepositoryRecord(parseResult.GetRequiredValue(repo), baseUrl), body, scope.Settings.MaxMetadataBytes, token);
-                if (!json)
-                {
-                    Console.Out.WriteLine($"Ingested {result.Packages} package(s), {result.Versions} version(s) into '{result.Repo}' (index v{result.IndexVersion}).");
-                }
-
-                return result;
-            }, ct);
-        });
-        return command;
-    }
-
     // ---- consent (A8) --------------------------------------------------------------------------
 
-    private static async Task<bool> IsNonInteractiveAsync(IServiceProvider sp, ParseResult parseResult, CancellationToken ct)
+    internal static async Task<bool> IsNonInteractiveAsync(IServiceProvider sp, ParseResult parseResult, CancellationToken ct)
     {
         string? configInteractive = null;
         var doc = await sp.GetRequiredService<IConfigStore>().LoadAsync(ct);
@@ -400,7 +356,7 @@ internal static class PackageCommands
     }
 
     /// <summary>--yes approves the displayed plan; otherwise prompt, or exit 10 when non-interactive (A8).</summary>
-    private static Task<bool> ApproveAsync(IServiceProvider sp, ParseResult parseResult, bool nonInteractive, CancellationToken ct)
+    internal static Task<bool> ApproveAsync(IServiceProvider sp, ParseResult parseResult, bool nonInteractive, CancellationToken ct)
     {
         if (parseResult.GetValue(GlobalOptions.Yes))
         {
