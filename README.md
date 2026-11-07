@@ -2,8 +2,10 @@
 
 **Version:** 2.3.1 (2026-11-03) · **Status:** all phases (0, A–F)
 implemented; verified on the Linux dev host (`docs/checkpoints/phase-f.md`).
-**Not yet released:** the Windows CI matrix, signing and release
-infrastructure are open blockers — see `docs/release-readiness.md`.
+**CI:** green on Windows x64 and ARM64 (unit, integration, real Native AOT
+shim, published-zip checks) and Linux. **Not yet released:** code signing,
+a production repository + root keys, the self-update feed and the HTTPS
+end-to-end suite are open blockers — see `docs/release-readiness.md`.
 
 This private repository holds BOTH:
 

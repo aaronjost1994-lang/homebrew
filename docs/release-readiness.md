@@ -1,10 +1,10 @@
 # Release Readiness — WinBrew 1.0.0 (+ v1.1 installer additions)
 
-**Date:** 2026-11-07 · **Commit basis:** `59fe30c` (first green CI run) ·
+**Date:** 2026-11-07 · **Commit basis:** `4ba60e7` ([ci run 42351461373](https://github.com/aaronjost1994-lang/homebrew/actions/runs/42351461373), all green) ·
 **Verdict: NOT READY TO RELEASE.** The Windows CI matrix (x64 and ARM64) is
-green; the real-shim process tests are wired into CI but have not run yet;
-signing and release infrastructure are missing; the HTTPS end-to-end suite is
-not built. Each blocker is listed below.
+green, including the real Native AOT shim; signing and release infrastructure
+are missing; the HTTPS end-to-end suite is not built; `release.yml` has not
+had its dry run. Each blocker is listed below.
 
 Evidence key — **dev host:** Linux x64, .NET SDK 10.0.403, `dotnet test`
 (release + test-hooks builds) and `docker build --target test`, all green:
@@ -19,10 +19,11 @@ all three jobs green:
 | linux (Docker) | 600/600 | 74 / 93 | 220 / 22 | — |
 
 The 8 x64 test-hooks skips are the 7 real-shim `ShimProcessTests` and
-`ExtractionVerificationTests`, which need the published binaries (fixed after
-this run: a new CI step runs them after packaging and fails if they are
-skipped). ARM64 additionally skips the 8 `InstallerWindowsTests` (fixtures
-are built on the x64 job only).
+`ExtractionVerificationTests`, which need the published binaries. Since
+`b1074f0` a CI step runs them after packaging against `out/<rid>/` and fails
+if any is skipped: [ci run 42351461373](https://github.com/aaronjost1994-lang/homebrew/actions/runs/42351461373) — **8/8 passed on x64 and on ARM64**. ARM64
+additionally skips the 8 `InstallerWindowsTests` (fixtures are built on the
+x64 job only).
 
 Windows-only defects found and fixed by the first CI runs: a ZIP file handle
 leaked on corrupt archives (`eda5d9c`); redirected stdout/stderr used the OEM
@@ -34,11 +35,11 @@ null member was rejected, so per-machine installs could never succeed
 |---|---|---|---|---|---|---|
 | 1 | Clean machine runs the CLI from the zip, nothing extracted to %TEMP% | Single-file bundle without native self-extraction; `e_sqlite3.dll` beside `wbrew.exe` (ADR-0001); Linux-hosted publish of both RIDs produced exactly the manifest set | `ReleaseBinaryTests.FromTheExtractedZip_…` (asserts an empty fresh `%TEMP%`) | CI x64 + ARM64: `FromTheExtractedZip_…` PASS ([ci run 42247232609](https://github.com/aaronjost1994-lang/homebrew/actions/runs/42247232609)) | PASS | |
 | 2 | Standard user self-installs, installs/removes portable packages without elevation | `self install`, portable lifecycle never elevates; only the v1.1 helper elevates | `SelfInstallTests`, `LifecycleCliTests`, `ReleaseBinaryTests.SelfInstall_…` | CI x64 + ARM64: `SelfInstallTests`, `ReleaseBinaryTests.SelfInstall_…` PASS | PASS | |
-| 3 | Commands run correctly through shims (args, cwd, exit codes, Ctrl+C), incl. x86/AnyCPU | Native AOT shim, MSVC `argv[0]` rules, job object, Ctrl+C forwarding (ADR-0007); x86/`0x014C` accepted (ADR-0019) | `ShimRulesTests` (≥ 35-case quoting corpus), `WindowsOnlyTests` (real shim process) | rules PASS everywhere; AOT shim built and used by E2E on both arches; real-shim process tests skipped in the green run | BLOCKED | Next CI run (new artifact-backed test step) |
+| 3 | Commands run correctly through shims (args, cwd, exit codes, Ctrl+C), incl. x86/AnyCPU | Native AOT shim, MSVC `argv[0]` rules, job object, Ctrl+C forwarding (ADR-0007); x86/`0x014C` accepted (ADR-0019) | `ShimRulesTests` (≥ 35-case quoting corpus), `WindowsOnlyTests` (real shim process) | rules PASS everywhere; real AOT shim process tests 8/8 on x64 + ARM64 ([ci run 42351461373](https://github.com/aaronjost1994-lang/homebrew/actions/runs/42351461373)): exit-code forwarding, 9009 containment, 206 overflow, self-shim rule | PASS | Ctrl+C delivery and stdin/stdout piping belong to the unbuilt HTTPS E2E suite |
 | 4 | Dependency conflicts fail with explanations before any change | PubGrub with derivation-tree explanations (ADR-0010) | `ResolverTests`, `DependencyCliTests.Conflict_…` (whole-root snapshot, no HTTP request) | dev host PASS | PASS | |
 | 5 | Corrupt downloads, malicious archives, tampered/expired/replayed metadata rejected | A13 HTTP + archive defenses; D6 trust chain (ADR-0009, ADR-0011) | `LifecycleCliTests` (corrupt artifact), `MaliciousArchiveTests`, `TrustChainTests`, `TrustCliTests` (11-attack matrix) | dev host PASS | PASS | Windows-only extraction re-check (reparse walk) runs in CI |
 | 6 | A crash at any registered checkpoint recovers or reports RecoveryFailed | Journal, compensation, roll-forward; 24 registered checkpoints (ADR-0008) | `CrashRecoveryTests` (coverage table = registry; every scenario) | CI x64 + ARM64 PASS, including `path.updated` (HKCU test key) | PASS | |
-| 7 | Upgrade (incl. while a shim runs), failed-upgrade recovery, uninstall, autoremove tested and documented | `.old.<guid>` protocol for running shims (D4), compensation, D8 | `LifecycleCliTests`, `CrashRecoveryTests` (Upgrade, MultiPackageUpgrade), `DependencyCliTests` (autoremove), `WindowsOnlyTests` (running shim); `recovery-troubleshooting.md` | CI PASS; upgrade-while-running (`ShimProcessTests.ReplacingARunningShim_…`) skipped in the green run | BLOCKED | Next CI run (new artifact-backed test step) |
+| 7 | Upgrade (incl. while a shim runs), failed-upgrade recovery, uninstall, autoremove tested and documented | `.old.<guid>` protocol for running shims (D4), compensation, D8 | `LifecycleCliTests`, `CrashRecoveryTests` (Upgrade, MultiPackageUpgrade), `DependencyCliTests` (autoremove), `WindowsOnlyTests` (running shim); `recovery-troubleshooting.md` | CI PASS, including upgrade-while-running (`ShimProcessTests.ReplacingARunningShim_…`, x64 + ARM64, [ci run 42351461373](https://github.com/aaronjost1994-lang/homebrew/actions/runs/42351461373)) | PASS | |
 | 8 | Locked bundles reproduce exact selections or fail explicitly | `bundle install --locked` never resolves (ADR-0011) | `BundleCliTests` (exact versions/digests, 5 defect cases, offline restore) | dev host PASS | PASS | |
 | 9 | JSON output and exit codes match their specifications | One mapping (`ExitCodes.cs`), versioned envelope schema | `EnvelopeSchemaTests`, `ExitCodesTests`; `cli-reference.md` (full table incl. 13 and the 130/`0xC000013A` note) | dev host PASS | PASS | |
 | 10 | CI passes on the declared support matrix, or blockers are listed | `ci.yml` (windows-latest x64, windows-11-arm ARM64, Linux Docker), `release.yml` | — | [ci run 42247232609](https://github.com/aaronjost1994-lang/homebrew/actions/runs/42247232609): all jobs green; `windows-11-arm` available | PASS | `release.yml` dry run not yet run |
@@ -79,7 +80,7 @@ localhost exception, which is not equivalent. **Release blocker.**
 | Metric | x64 | ARM64 | Target |
 |---|---|---|---|
 | `--version` warm start (post-self-install, through the shim) | **88 ms** median of 10 (CI) | **87 ms** median of 10 (CI) | < 300 ms ✔ |
-| `--version` first run (fresh profile) | **1,484 ms** (CI) | **1,622 ms** (CI) | report only |
+| `--version` first run (fresh profile) | **640–1,484 ms** across two CI runs (cold-disk variance) | **1,372–1,622 ms** across two CI runs | report only |
 | `list` (200 packages) | dev host: median **557 ms** (test-host process, Linux). CI: ran, passed the < 2 s regression gate; number not captured (console verbosity) | same as x64 | < 500 ms — **target measurement not yet taken** |
 | `search` (10k generated catalog, median of 10) | dev host: median **463 ms** (min 398, max 549). CI: ran and passed the < 1 s assertion | CI: passed the < 1 s assertion | < 1 s ✔ |
 | Shim overhead / size | size **1,223,680 bytes** (CI); overhead not measured separately | size **1,234,432 bytes** (CI) | < 30 ms / < 3 MB (size ✔) |
@@ -92,5 +93,5 @@ localhost exception, which is not equivalent. **Release blocker.**
 
 See `known-limitations.md`. Release-relevant: unsigned artifacts until a
 signing route exists; no public repository or self-update feed; Windows-only
-real-shim process tests pending their first CI run; the helper roughly doubles the zip size
+Ctrl+C and piping through shims not yet tested end to end; the helper roughly doubles the zip size
 (trimming or Native AOT for the helper should be evaluated on Windows).
