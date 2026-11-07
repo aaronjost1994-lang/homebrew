@@ -82,6 +82,23 @@ jobs:
         shell: pwsh
         run: pwsh scripts/package-release.ps1 -Version 0.0.0-ci -Output out -Rids ${{ matrix.rid }}
 
+      - name: Shim + published-binary integration tests (real Native AOT shim)
+        # D4 shim behavior (quoting, exit-code forwarding, containment, 9009/206)
+        # and the no-%TEMP%-extraction check need the PUBLISHED binaries, which
+        # exist only after packaging; earlier test steps skip them. Runs the
+        # test-hooks build from the step above (--no-build). A run in which these
+        # tests are all skipped fails here instead of passing silently.
+        shell: pwsh
+        run: |
+          $env:WINBREW_SHIM_EXE = (Resolve-Path "out/${{ matrix.rid }}/wbrew-shim.exe").Path
+          $env:WINBREW_PUBLISHED_EXE = (Resolve-Path "out/${{ matrix.rid }}/wbrew.exe").Path
+          dotnet test tests/WinBrew.IntegrationTests -c Release --no-build `
+            --filter "FullyQualifiedName~ShimProcessTests|FullyQualifiedName~ExtractionVerificationTests" `
+            --logger "console;verbosity=normal" --logger "trx;LogFilePrefix=artifacts" --results-directory TestResults | Tee-Object -Variable output
+          if ($LASTEXITCODE -ne 0) { throw 'artifact-backed integration tests failed' }
+          if (($output -join "`n") -notmatch 'Passed:\s+[1-9]') { throw 'no artifact-backed integration test ran' }
+          if (($output -join "`n") -match 'Skipped:\s+[1-9]') { throw 'artifact-backed integration tests were skipped' }
+
       - name: Release-binary checks (E2E project, published binaries)
         shell: pwsh
         run: |
