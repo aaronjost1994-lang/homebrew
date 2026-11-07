@@ -185,7 +185,17 @@ public sealed class ShimProcessTests : IDisposable
     [WindowsArtifactFact("WINBREW_SHIM_EXE", "the published wbrew-shim.exe")]
     public void CommandLineOverflow_Is206()
     {
-        var (code, err) = Run(Install("c"), "/c " + new string('a', 32760));
+        // The arguments must FIT the shim's own command line ("<shim>" + ' ' + args,
+        // at most 32,766 chars plus the terminating null, or CreateProcess refuses
+        // to start the shim at all) and OVERFLOW the child's ("<target>" + ' ' +
+        // args, the shim's ShimRules.ExceedsLimit). That window exists because the target
+        // path (packages\cmd\1.0.0\x64\cmd.exe) is longer than the shim path (bin\c.exe).
+        var shim = Install("c");
+        var target = Path.Combine(_root, "packages", "cmd", "1.0.0", "x64", "cmd.exe");
+        const int MaxCommandLineChars = 32767; // ShimRules.MaxCommandLineChars (the shim project is not referenced here)
+        var argsLength = MaxCommandLineChars - 1 - (shim.Length + 3);
+        Assert.True(target.Length + 3 + argsLength + 1 > MaxCommandLineChars, "the arguments must overflow the child's command line");
+        var (code, err) = Run(shim, "/c " + new string('a', argsLength - 3));
         Assert.Equal(206, code);
         Assert.Contains("exceeds the Windows limit", err, StringComparison.Ordinal);
     }
