@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Server-side publisher for a SIGNED WinBrew repository (D6 format):
+       packs package folders into deterministic ZIP artifacts, writes the
+       manifests, index.json, timestamp.json and root.json, signed with keys
+       that persist between runs. Used by deploy/server (Docker Compose).
+       Not part of the shipped client. -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>winbrew-repo</AssemblyName>
+    <RootNamespace>WinBrew.RepoTool</RootNamespace>
+    <Version>0.1.0</Version>
+    <IsPackable>false</IsPackable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="WinBrew.IntegrationTests" />
+  </ItemGroup>
+
+</Project>

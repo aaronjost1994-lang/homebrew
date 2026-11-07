@@ -23,3 +23,6 @@ Thumbs.db
 # Process core dumps (FailFast crash tests on Linux)
 core
 core.[0-9]*
+
+# deploy/server: local settings (copy of .env.example)
+deploy/server/.env

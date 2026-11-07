@@ -384,6 +384,9 @@
           "WinBrew.Windows": "[1.0.0, )"
         }
       },
+      "winbrew-repo": {
+        "type": "Project"
+      },
       "winbrew.application": {
         "type": "Project",
         "dependencies": {

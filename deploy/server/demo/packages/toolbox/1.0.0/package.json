@@ -1,0 +1,12 @@
+{
+  "displayName": "Toolbox",
+  "description": "Demo package with dependencies: installing it also installs echoargs and exitcode.",
+  "homepage": "https://github.com/aaronjost1994-lang/homebrew",
+  "license": "MIT",
+  "architecture": "x64",
+  "dependencies": [
+    { "id": "echoargs", "range": "[1.0.0,2.0.0)" },
+    { "id": "exitcode", "range": "[1.0.0,2.0.0)" }
+  ],
+  "executables": [ { "name": "toolbox", "target": "bin/toolbox.exe" } ]
+}

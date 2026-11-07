@@ -6,6 +6,32 @@ semantics; versions are `NuGetVersion`-normalized (D3).
 
 ## [Unreleased]
 
+## [0.1.0] — 2026-11-07 (first preview, UNSIGNED)
+
+Preview build for trying WinBrew end to end. Not for production use:
+binaries are not Authenticode-signed, and no public repository or
+self-update feed exists yet (`docs/release-readiness.md`).
+
+### Added (deployment)
+- `deploy/server/`: Docker Compose stack serving a signed demo repository
+  over HTTPS (Caddy, with Let's Encrypt or a local CA) and `winbrew-repo`
+  (`tools/WinBrew.RepoTool`), which packs package folders into deterministic
+  ZIPs, signs root/timestamp/index with persistent keys and re-signs daily.
+  The demo packages (`hello` 1.0.0/2.0.0, `toolbox`, `echoargs`,
+  `exitcode`) are real Windows x64 programs cross-compiled with MinGW-w64.
+- `deploy/client/Install-WinBrew.ps1`: verifies a release zip against
+  `SHA256SUMS.txt`, self-installs, optionally trusts the server's CA, and
+  adds the repository. Walkthrough: `deploy/README.md`.
+- `docs/user-manual.md` and architecture diagrams in the README.
+
+### Fixed (found by the first Windows CI runs)
+- Per-machine MSI/EXE operations always failed: helper results with null
+  members were rejected (exit 5).
+- Redirected stdout/stderr (pipes, `--json`) were encoded in the OEM code
+  page on Windows instead of UTF-8.
+- A corrupt download kept the artifact file locked on Windows (ZIP stream
+  leak).
+
 ### Added (Phase F — documentation and release hardening, 2026-11-06)
 - Documentation: architecture, CLI reference (full exit-code table incl. 13
   and the 130-vs-0xC000013A note), manifest and repository/trust

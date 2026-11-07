@@ -81,6 +81,13 @@ sequenceDiagram
     C-->>U: result (exit 0) / JSON envelope
 ```
 
+## Try it: repository server + Windows client
+
+`deploy/server/` runs a signed demo repository over HTTPS with Docker
+Compose (Caddy + the `winbrew-repo` publisher), and
+`deploy/client/Install-WinBrew.ps1` installs a WinBrew release on Windows and
+connects it. Walkthrough: **[deploy/README.md](deploy/README.md)**.
+
 ## User manual
 
 Installation, first steps, everyday commands, bundles, installer packages,

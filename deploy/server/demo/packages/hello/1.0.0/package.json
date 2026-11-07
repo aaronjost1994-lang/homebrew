@@ -1,0 +1,8 @@
+{
+  "displayName": "Hello",
+  "description": "Prints a greeting. Version 1.0.0 of the WinBrew demo package.",
+  "homepage": "https://github.com/aaronjost1994-lang/homebrew",
+  "license": "MIT",
+  "architecture": "x64",
+  "executables": [ { "name": "hello", "target": "bin/hello.exe" } ]
+}

@@ -1,0 +1,8 @@
+{
+  "displayName": "exitcode",
+  "description": "Exits with the code given as its first argument.",
+  "homepage": "https://github.com/aaronjost1994-lang/homebrew",
+  "license": "MIT",
+  "architecture": "x64",
+  "executables": [ { "name": "exitcode", "target": "bin/exitcode.exe" } ]
+}

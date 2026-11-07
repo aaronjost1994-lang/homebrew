@@ -28,6 +28,7 @@ COPY tests/WinBrew.CliTestHost/*.csproj tests/WinBrew.CliTestHost/packages.lock.
 COPY tests/WinBrew.UnitTests/*.csproj tests/WinBrew.UnitTests/packages.lock.json tests/WinBrew.UnitTests/
 COPY tests/WinBrew.IntegrationTests/*.csproj tests/WinBrew.IntegrationTests/packages.lock.json tests/WinBrew.IntegrationTests/
 COPY tests/WinBrew.EndToEndTests/*.csproj tests/WinBrew.EndToEndTests/packages.lock.json tests/WinBrew.EndToEndTests/
+COPY tools/WinBrew.RepoTool/*.csproj tools/WinBrew.RepoTool/packages.lock.json tools/WinBrew.RepoTool/
 RUN dotnet restore WinBrew.sln --locked-mode
 
 # 2) Build (warnings are errors) and test. A failing test fails `docker build`.

@@ -1,0 +1,8 @@
+{
+  "displayName": "echoargs",
+  "description": "Prints every argument in [brackets] to show how quoting passes through a shim.",
+  "homepage": "https://github.com/aaronjost1994-lang/homebrew",
+  "license": "MIT",
+  "architecture": "x64",
+  "executables": [ { "name": "echoargs", "target": "bin/echoargs.exe" } ]
+}

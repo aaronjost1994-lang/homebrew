@@ -7,7 +7,9 @@ through one `bin\` folder on your `PATH`.
 
 > **Status.** No public release exists yet. See
 > [release-readiness.md](release-readiness.md) for what is missing. Until a
-> release is published, build WinBrew from source (section 1.2).
+> release is published, build WinBrew from source (section 1.2) or use a
+> release built from a version tag. To try everything end to end with your
+> own signed repository server, follow [deploy/README.md](../deploy/README.md).
 
 Contents
 
