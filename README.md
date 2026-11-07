@@ -7,7 +7,7 @@ shim, published-zip checks) and Linux. **Not yet released:** code signing,
 a production repository + root keys, the self-update feed and the HTTPS
 end-to-end suite are open blockers — see `docs/release-readiness.md`.
 
-This private repository holds BOTH:
+This repository holds BOTH:
 
 1. **The phased implementation prompt set** for **WinBrew** (`wbrew`), an
    independent, Windows-native CLI package manager on .NET 10 — the

@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   1. Gets the release zip: -ZipPath (already downloaded) or -Version (downloaded
-     from the GitHub release with the gh CLI; the repository is private).
+     from the published GitHub release over HTTPS; no login needed).
   2. Verifies its SHA-256 against SHA256SUMS.txt from the same release.
   3. Extracts it and runs `wbrew self install --modify-path`.
   4. Optionally trusts the server's CA (-CaCertPath; only for servers that use
@@ -19,7 +19,7 @@
       -RepoUrl https://192.168.1.50:8443/ -Fingerprint <64 hex chars> -CaCertPath .\winbrew-repo-ca.crt
 
 .EXAMPLE
-  # Download release v0.1.0 with gh (gh auth login first):
+  # Download the published release v0.1.0 directly from GitHub:
   .\Install-WinBrew.ps1 -Version 0.1.0 -RepoUrl https://repo.example.com/ -Fingerprint <64 hex chars>
 #>
 [CmdletBinding(DefaultParameterSetName = 'Zip')]
@@ -45,14 +45,19 @@ New-Item -ItemType Directory -Path $work | Out-Null
 try {
     # ---- 1. Get the zip ---------------------------------------------------------------
     if ($PSCmdlet.ParameterSetName -eq 'Download') {
-        if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-            throw 'The gh CLI is required for -Version (https://cli.github.com). Or download the zip and SHA256SUMS.txt by hand and use -ZipPath.'
-        }
-        Write-Host "Downloading WinBrew v$Version ($arch) from $GitHubRepo ..."
-        gh release download "v$Version" --repo $GitHubRepo --dir $work --pattern "wbrew-*-$arch.zip" --pattern 'SHA256SUMS.txt'
-        if ($LASTEXITCODE -ne 0) { throw "gh release download failed (exit $LASTEXITCODE)." }
-        $ZipPath = (Get-ChildItem $work -Filter "wbrew-*-$arch.zip" | Select-Object -First 1).FullName
+        # The release lists its assets; pick this architecture's zip (signed or -UNSIGNED).
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $api = "https://api.github.com/repos/$GitHubRepo/releases/tags/v$Version"
+        Write-Host "Looking up WinBrew v$Version on $GitHubRepo ..."
+        $release = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'Install-WinBrew' }
+        $zipAsset = $release.assets | Where-Object { $_.name -like "wbrew-*-$arch.zip" } | Select-Object -First 1
+        $sumsAsset = $release.assets | Where-Object { $_.name -eq 'SHA256SUMS.txt' } | Select-Object -First 1
+        if (-not $zipAsset -or -not $sumsAsset) { throw "Release v$Version has no $arch zip or SHA256SUMS.txt (is it published, not a draft?)." }
+        $ZipPath = Join-Path $work $zipAsset.name
         $SumsPath = Join-Path $work 'SHA256SUMS.txt'
+        Write-Host "Downloading $($zipAsset.name) ..."
+        Invoke-WebRequest -Uri $zipAsset.browser_download_url -OutFile $ZipPath -UseBasicParsing
+        Invoke-WebRequest -Uri $sumsAsset.browser_download_url -OutFile $SumsPath -UseBasicParsing
     }
     $ZipPath = (Resolve-Path $ZipPath).Path
     if (-not $SumsPath) { $SumsPath = Join-Path (Split-Path $ZipPath) 'SHA256SUMS.txt' }

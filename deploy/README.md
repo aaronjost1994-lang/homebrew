@@ -154,7 +154,8 @@ Set-ExecutionPolicy -Scope Process Bypass
     -CaCertPath .\winbrew-repo-ca.crt
 ```
 
-Or download straight from the release with the `gh` CLI (the repository is private):
+Or let the script download the published release itself (no login needed,
+the repository is public):
 `.\Install-WinBrew.ps1 -Version 0.1.0 -RepoUrl ... -Fingerprint ... -CaCertPath ...`
 
 The script checks the zip against `SHA256SUMS.txt`, runs
